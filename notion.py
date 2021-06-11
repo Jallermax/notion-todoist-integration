@@ -90,6 +90,10 @@ class PropertyFormatter:
         return {"rich_text": [{"text": {"content": value}}]}
 
     @staticmethod
+    def rich_text_link(text: str, link: str):
+        return {"rich_text": [{"text": {"content": text, "link": {"url": link}}}]}
+
+    @staticmethod
     def date(value: str):
         return {"date": {"start": value}}
 

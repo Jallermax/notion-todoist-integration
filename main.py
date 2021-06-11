@@ -1,17 +1,21 @@
 import logging
 import datetime
+import time
 import pytz
 import secrets
 import notion
 import todoist
 from notion import PropertyFormatter as pformat
 
+TIMEZONE = "Europe/Moscow"
+
 _LOG = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
 def update_task_id(page_id, task_id):
-    notion.update_page(page_id, TodoistTaskId=pformat.rich_text(str(task_id)))
+    task_link = f"https://todoist.com/showTask?id={task_id}"
+    notion.update_page(page_id, TodoistTaskId=pformat.rich_text_link(str(task_id), task_link))
 
 
 def create_history_record(action_id, task):
@@ -22,7 +26,7 @@ def create_history_record(action_id, task):
                        Name=pformat.title('Api' if task['description'] == '' else task['description']),
                        Completed=pformat.date(dt),
                        Action=pformat.relation(action_id),
-                       TodoistTaskId=pformat.rich_text(str(task['id'])))
+                       TodoistTaskId=pformat.rich_text_link(str(task['id']), task_link))
 
 
 def gather_metadata(todoist_api: todoist.TodoistAPI = None):
@@ -78,15 +82,18 @@ def main():
     no_tasks_records['results'].extend(completed_records['results'])
     actions_to_update = []  # TODO join no_tasks_records and actions_to_update into dict maybe?
     for record in no_tasks_records['results']:
-        task_content = record['properties']['Sub-Topic']['title'][0]['plain_text']
-        # Need to check for existing open tasks with same task_content but without link??
-        _LOG.debug(f"creating task for record {task_content}")
         try:
-            # Sometimes Next action may be without date even though there's date in Notion GUI for this record
-            due_date = {"string": record['properties']['Next action']['formula']['date']['start']}
+            task_content = record['properties']['Sub-Topic']['title'][0]['plain_text']
+            _LOG.debug(f"creating task for record {task_content}")
+            try:
+                # Sometimes Next action may be without date even though there's date in Notion GUI for this record
+                due_date = {"string": record['properties']['Next action']['formula']['date']['start']}
+            except TypeError as e:
+                _LOG.error("Error during parsing Next Action date property:", str(e))
+                due_date = {"string": "today"}
         except Exception as e:
-            _LOG.error("Error during parsing Next Action date property:", str(e))
-            due_date = {"string": "today"}
+            _LOG.error("Error during parsing action record properties:", str(e))
+            continue
         task = todoist_api.items.add(task_content, project_id=secrets.MAINTENANCE_PROJECT_ID, due=due_date)
         _LOG.debug(task)
         actions_to_update.append({"action_id": record['id'], "task": task})
@@ -100,4 +107,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    while True:
+        main()
+        time.sleep(20)
