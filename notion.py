@@ -47,20 +47,24 @@ def read_database(database_id, query=None, log_to_file=False):
     return data
 
 
-def create_page(parent_id, **kwargs):
+def create_page(parent_id, children=None, **kwargs):
     url = f"https://api.notion.com/v1/pages/"
 
     page_properties = {}
     page_properties.update(kwargs)
     params = {"parent": {"database_id": parent_id}, "properties": page_properties}
+    if children:
+        params['children'] = children
     res = requests.post(url, headers=headers, json=params)
     process_response(res)
 
 
-def update_page(page_id, properties):
+def update_page(page_id, **kwargs):
     url = f"https://api.notion.com/v1/pages/{page_id}"
 
-    res = requests.patch(url, headers=headers, json=properties)
+    properties = {}
+    properties.update(kwargs)
+    res = requests.patch(url, headers=headers, json={"properties": properties})
     process_response(res)
 
 
@@ -84,6 +88,14 @@ class PropertyFormatter:
     @staticmethod
     def rich_text(value: str):
         return {"rich_text": [{"text": {"content": value}}]}
+
+    @staticmethod
+    def date(value: str):
+        return {"date": {"start": value}}
+
+    @staticmethod
+    def relation(page_id: str):
+        return {"relation": [{"id": page_id}]}
 
     @staticmethod
     def checkbox(value: bool):

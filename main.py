@@ -11,19 +11,24 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(funcName)s - %(levelname)
 
 
 def update_task_id(page_id, task_id):
-    notion.update_page(page_id, {"properties": {"TodoistTaskId": pformat.rich_text(str(task_id))}})
+    notion.update_page(page_id, TodoistTaskId=pformat.rich_text(str(task_id)))
 
 
-def create_history_record(action_id, dt=None):
+def create_history_record(action_id, task):
+    dt = task['date_completed']
     if not dt:
         dt = pytz.timezone("Europe/Moscow").localize(datetime.datetime.now()).isoformat()
     notion.create_page(secrets.HISTORY_DATABASE_ID,
-                       Name=pformat.title('Api'),
-                       Completed={"date": {"start": dt}},
-                       Action={"relation": [{"id": action_id}]})
+                       Name=pformat.title('Api' if task['description'] == '' else task['description']),
+                       Completed=pformat.date(dt),
+                       Action=pformat.relation(action_id),
+                       TodoistTaskId=pformat.rich_text(str(task['id'])))
 
 
-def gather_metadata(todoist_api):
+def gather_metadata(todoist_api: todoist.TodoistAPI = None):
+    if not todoist_api:
+        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+        todoist_api.sync()
     # Todoist
     print("Todoist Projects:")
     for prj in todoist_api.state['projects']:
@@ -51,18 +56,19 @@ def main():
     # 1.Get completed tasks from Todoist
     completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
     or_filter_conditions = []
-    for task1 in completed_tasks:
-        or_filter_conditions.append({"property": "TodoistTaskId", "text": {"equals": str(task1['task_id'])}})
+    for task in completed_tasks:
+        or_filter_conditions.append({"property": "TodoistTaskId", "text": {"equals": str(task['task_id'])}})
 
     # 2.Create history records in Notion for each completed task
     query = {"filter": {"or": or_filter_conditions}}
     completed_records = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, query, log_to_file=True)
     for record in completed_records['results']:
-        completed_dt = list(filter(
+        completed_task = list(filter(
             lambda ct: str(ct['task_id']) == record['properties']['TodoistTaskId']['rich_text'][0]['plain_text'],
-            completed_tasks))[0]['completed_date']  # TODO find a better way to reduce to complete_date
+            completed_tasks))[0]  # TODO find a better way to reduce to complete_date
         # TODO produce completed_dt from UTC to Moscow time
-        create_history_record(record['id'], dt=completed_dt)
+        detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
+        create_history_record(record['id'], detailed_task)
 
     # 3.Gather notion maintenance actions without Todoist task_id
     no_tasks_query = {"filter": {"property": "TodoistTaskId", "text": {"is_empty": True}}}
@@ -72,14 +78,15 @@ def main():
     no_tasks_records['results'].extend(completed_records['results'])
     actions_to_update = []  # TODO join no_tasks_records and actions_to_update into dict maybe?
     for record in no_tasks_records['results']:
+        task_content = record['properties']['Sub-Topic']['title'][0]['plain_text']
+        # Need to check for existing open tasks with same task_content but without link??
+        _LOG.debug(f"creating task for record {task_content}")
         try:
-            task_content = record['properties']['Sub-Topic']['title'][0]['plain_text']
-            _LOG.debug(f"creating task for record {task_content}")
-            due_date = {"string": record['properties']['Next action']['formula']['date']['start']}
             # Sometimes Next action may be without date even though there's date in Notion GUI for this record
+            due_date = {"string": record['properties']['Next action']['formula']['date']['start']}
         except Exception as e:
-            _LOG.error("Error during parsing record properties:", str(e))
-            continue
+            _LOG.error("Error during parsing Next Action date property:", str(e))
+            due_date = {"string": "today"}
         task = todoist_api.items.add(task_content, project_id=secrets.MAINTENANCE_PROJECT_ID, due=due_date)
         _LOG.debug(task)
         actions_to_update.append({"action_id": record['id'], "task": task})
@@ -87,7 +94,9 @@ def main():
 
     # 5.Save task_id to notion actions
     for atu in actions_to_update:
-        update_task_id(atu['action_id'], atu['task']['id'])
+        # Check that task was created
+        if atu['task']['user_id']:
+            update_task_id(atu['action_id'], atu['task']['id'])
 
 
 if __name__ == '__main__':
