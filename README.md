@@ -2,9 +2,7 @@ Run to start workflow of creating history records to Notion for each completed T
 
 **Technical TODO:**
 * Setup CI/DI + project structure improvement
-* Add delay for jobs start
 * Limit completed tasks query by time (1-7 day before now)
-* Fix timezones (Todoist completed date -> Notion history completed)
 * Improve logging of each api call (log all params) and on logic workflow
 * Refactor workflow for better readability (for reuse and GUI later)
 * Decouple notion module as separate lib

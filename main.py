@@ -21,7 +21,11 @@ def update_task_id(page_id, task_id):
 def create_history_record(action_id, task):
     dt = task['date_completed']
     if not dt:
-        dt = pytz.timezone("Europe/Moscow").localize(datetime.datetime.now()).isoformat()
+        dt = pytz.timezone(TIMEZONE).localize(datetime.datetime.now()).isoformat()
+    else:
+        dt = pytz.timezone(TIMEZONE).normalize(
+            pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ"))).isoformat()
+    task_link = f"https://todoist.com/showTask?id={task['id']}"
     notion.create_page(secrets.HISTORY_DATABASE_ID,
                        Name=pformat.title('Api' if task['description'] == '' else task['description']),
                        Completed=pformat.date(dt),
