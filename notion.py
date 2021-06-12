@@ -21,9 +21,9 @@ def read_database_metadata(database_id):
 
 def read_databases_list(**kwargs):
     url = "https://api.notion.com/v1/search"
-    params = {"filter": {"property": {"object": "database"}}}
+    params = {"filter": {"object": "database"}}
     params.update(kwargs)
-    res = requests.get(url, headers=headers, json=params)
+    res = requests.post(url, headers=headers, json=params)
     process_response(res)
     return res.json()
 
@@ -47,24 +47,22 @@ def read_database(database_id, query=None, log_to_file=False):
     return data
 
 
-def create_page(parent_id, children=None, **kwargs):
+def create_page(parent_id, *args, **kwargs):
     url = f"https://api.notion.com/v1/pages/"
 
-    page_properties = {}
-    page_properties.update(kwargs)
-    params = {"parent": {"database_id": parent_id}, "properties": page_properties}
-    if children:
-        params['children'] = children
+    params = {"parent": {"database_id": parent_id}, "properties": kwargs}
+    if args:
+        params.update({"children": args})
     res = requests.post(url, headers=headers, json=params)
     process_response(res)
+    return res.json()
 
 
 def update_page(page_id, **kwargs):
     url = f"https://api.notion.com/v1/pages/{page_id}"
 
-    properties = {}
-    properties.update(kwargs)
-    res = requests.patch(url, headers=headers, json={"properties": properties})
+    properties = {"properties": kwargs}
+    res = requests.patch(url, headers=headers, json=properties)
     process_response(res)
 
 

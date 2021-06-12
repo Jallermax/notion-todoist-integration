@@ -19,22 +19,23 @@ def update_task_id(page_id, task_id):
 
 
 def create_history_record(action_id, task):
-    task_id = task['id']
+    task_id = str(task['id'])
     dt = task['date_completed']
     desc = task['description']
-    
+
     if dt:
-        dt = LOCAL_TIMEZONE.normalize(pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ")))
+        dt = LOCAL_TIMEZONE.normalize(
+            pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ")))
     else:
         dt = LOCAL_TIMEZONE.localize(datetime.datetime.now())
     title = dt.strftime('%y.%m.%d') + ('' if desc == '' else ' ' + desc)
     task_link = f"https://todoist.com/showTask?id={task_id}"
-    
-    notion.create_page(secrets.HISTORY_DATABASE_ID,
-                       Record=pformat.title(title),
-                       Completed=pformat.date(dt.isoformat()),
-                       Action=pformat.relation(action_id),
-                       TodoistTaskId=pformat.rich_text_link(str(task_id), task_link))
+
+    return notion.create_page(secrets.HISTORY_DATABASE_ID,
+                              Record=pformat.title(title),
+                              Completed=pformat.date(dt.isoformat()),
+                              Action=pformat.relation(action_id),
+                              TodoistTaskId=pformat.rich_text_link(task_id, task_link))
 
 
 def gather_metadata(todoist_api: todoist.TodoistAPI = None):
@@ -67,51 +68,52 @@ def main():
 
     # 1.Get completed tasks from Todoist
     completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
-    or_filter_conditions = []
-    for task in completed_tasks:
-        or_filter_conditions.append({"property": "TodoistTaskId", "text": {"equals": str(task['task_id'])}})
+    or_filter_conditions = list(
+        {"property": "TodoistTaskId", "text": {"equals": str(task['task_id'])}} for task in completed_tasks)
 
     # 2.Create history records in Notion for each completed task
     query = {"filter": {"or": or_filter_conditions}}
-    completed_records = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, query, log_to_file=True)
-    for record in completed_records['results']:
+    completed_actions = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, query, log_to_file=True)
+
+    history_records_ids = []
+    for action in completed_actions['results']:
         completed_task = list(filter(
-            lambda ct: str(ct['task_id']) == record['properties']['TodoistTaskId']['rich_text'][0]['plain_text'],
+            lambda ct: str(ct['task_id']) == action['properties']['TodoistTaskId']['rich_text'][0]['plain_text'],
             completed_tasks))[0]  # TODO find a better way to reduce to complete_date
-        # TODO produce completed_dt from UTC to Moscow time
         detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
-        create_history_record(record['id'], detailed_task)
+        history_records_ids.append(create_history_record(action['id'], detailed_task)['id'])
 
     # 3.Gather notion maintenance actions without Todoist task_id
-    no_tasks_query = {"filter": {"property": "TodoistTaskId", "text": {"is_empty": True}}}
-    no_tasks_records = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, no_tasks_query, True)
+    empty_task_id_condition = {"property": "TodoistTaskId", "text": {"is_empty": True}}
+    completed_actions_filter = list(
+        {"property": "History records", "relation": {"contains": page_id}} for page_id in history_records_ids)
+    no_tasks_query = {"filter": {"or": [empty_task_id_condition, *completed_actions_filter]}}
+    actions_to_update = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, no_tasks_query, True)
 
     # 4.Create task in Todoist for each maintenance action without active link to by task_id
-    no_tasks_records['results'].extend(completed_records['results'])
-    actions_to_update = []  # TODO join no_tasks_records and actions_to_update into dict maybe?
-    for record in no_tasks_records['results']:
+    for action in actions_to_update['results']:
         try:
-            task_content = record['properties']['Sub-Topic']['title'][0]['plain_text']
-            _LOG.debug(f"creating task for record {task_content}")
+            title = action['properties']['Sub-Topic']['title'][0]['plain_text']
+            _LOG.debug(f"creating task for action {title}")
             try:
-                # Sometimes Next action may be without date even though there's date in Notion GUI for this record
-                due_date = {"string": record['properties']['Next action']['formula']['date']['start']}
+                # Notion bug? where it doesn't put date in Next action if formula result is 'now()'
+                due_date = {"string": action['properties']['Next action']['formula']['date']['start']}
             except TypeError as e:
-                _LOG.error("Error during parsing Next Action date property:", str(e))
+                _LOG.error(f"Error during parsing Next Action date property of {title}:", str(e))
                 due_date = {"string": "today"}
         except Exception as e:
-            _LOG.error("Error during parsing action record properties:", str(e))
+            _LOG.error("Error during parsing action action properties:", str(e))
             continue
-        task = todoist_api.items.add(task_content, project_id=secrets.MAINTENANCE_PROJECT_ID, due=due_date)
+        task = todoist_api.items.add(title, project_id=secrets.MAINTENANCE_PROJECT_ID, due=due_date)
         _LOG.debug(task)
-        actions_to_update.append({"action_id": record['id'], "task": task})
+        action.update({"created_task": task})
     todoist_api.commit()
 
     # 5.Save task_id to notion actions
-    for atu in actions_to_update:
+    for atu in actions_to_update['results']:
         # Check that task was created
-        if atu['task']['user_id']:
-            update_task_id(atu['action_id'], atu['task']['id'])
+        if 'created_task' in atu and 'user_id' in atu['created_task']:
+            update_task_id(atu['id'], atu['created_task']['id'])
 
 
 if __name__ == '__main__':
