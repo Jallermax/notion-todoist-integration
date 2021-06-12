@@ -7,7 +7,7 @@ import notion
 import todoist
 from notion import PropertyFormatter as pformat
 
-TIMEZONE = "Europe/Moscow"
+LOCAL_TIMEZONE = pytz.timezone("Europe/Moscow")
 
 _LOG = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -19,18 +19,22 @@ def update_task_id(page_id, task_id):
 
 
 def create_history_record(action_id, task):
+    task_id = task['id']
     dt = task['date_completed']
-    if not dt:
-        dt = pytz.timezone(TIMEZONE).localize(datetime.datetime.now()).isoformat()
+    desc = task['description']
+    
+    if dt:
+        dt = LOCAL_TIMEZONE.normalize(pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ")))
     else:
-        dt = pytz.timezone(TIMEZONE).normalize(
-            pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ"))).isoformat()
-    task_link = f"https://todoist.com/showTask?id={task['id']}"
+        dt = LOCAL_TIMEZONE.localize(datetime.datetime.now())
+    title = dt.strftime('%y.%m.%d') + ('' if desc == '' else ' ' + desc)
+    task_link = f"https://todoist.com/showTask?id={task_id}"
+    
     notion.create_page(secrets.HISTORY_DATABASE_ID,
-                       Name=pformat.title('Api' if task['description'] == '' else task['description']),
-                       Completed=pformat.date(dt),
+                       Record=pformat.title(title),
+                       Completed=pformat.date(dt.isoformat()),
                        Action=pformat.relation(action_id),
-                       TodoistTaskId=pformat.rich_text_link(str(task['id']), task_link))
+                       TodoistTaskId=pformat.rich_text_link(str(task_id), task_link))
 
 
 def gather_metadata(todoist_api: todoist.TodoistAPI = None):
