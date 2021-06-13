@@ -1,4 +1,4 @@
-Run to start workflow of creating history records to Notion for each completed Todoist task linked with Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one. Single run only for now, periodical job runs later.
+Each 20 seconds runs workflow of creating history records to Notion for each completed Todoist task linked with Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one.
 
 **Technical TODO:**
 * Setup CI/DI + project structure improvement
@@ -11,7 +11,6 @@ Run to start workflow of creating history records to Notion for each completed T
 
 **Feature plan:**</br>
 * Save task comments to notion history
-* Add global tag system (to interconnect tasks in todoist with maintenance mindset and with influence on wheel of well-being)
 * Webhook triggers (run on notion page update?)
 * Add explicit error notification (to tg bot for example)
 * Think about workflow with repeatable tasks (any pros except better visibility in todoist?)

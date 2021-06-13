@@ -2,6 +2,7 @@ import logging
 import datetime
 import time
 import pytz
+import itertools
 import secrets
 import notion
 import todoist
@@ -61,6 +62,10 @@ def gather_metadata(todoist_api: todoist.TodoistAPI = None):
           f"properties: {p_dict}")
 
 
+def get_prop(action, name):
+    return action['properties'][name][action['properties'][name]['type']]
+
+
 def main():
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
@@ -68,43 +73,51 @@ def main():
 
     # 1.Get completed tasks from Todoist
     completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
-    or_filter_conditions = list(
+    by_task_id_filter = list(
         {"property": "TodoistTaskId", "text": {"equals": str(task['task_id'])}} for task in completed_tasks)
 
     # 2.Create history records in Notion for each completed task
-    query = {"filter": {"or": or_filter_conditions}}
+    query = {"filter": {"or": by_task_id_filter}}
     completed_actions = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, query, log_to_file=True)
 
     history_records_ids = []
     for action in completed_actions['results']:
         completed_task = list(filter(
-            lambda ct: str(ct['task_id']) == action['properties']['TodoistTaskId']['rich_text'][0]['plain_text'],
+            lambda ct: str(ct['task_id']) == get_prop(action, 'TodoistTaskId')[0]['plain_text'],
             completed_tasks))[0]  # TODO find a better way to reduce to complete_date
         detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
         history_records_ids.append(create_history_record(action['id'], detailed_task)['id'])
 
     # 3.Gather notion maintenance actions without Todoist task_id
-    empty_task_id_condition = {"property": "TodoistTaskId", "text": {"is_empty": True}}
+    empty_task_id_filter = {"property": "TodoistTaskId", "text": {"is_empty": True}}
+    not_on_hold_filter = {"property": "OnHold", "checkbox": {"equals": False}}
     completed_actions_filter = list(
         {"property": "History records", "relation": {"contains": page_id}} for page_id in history_records_ids)
-    no_tasks_query = {"filter": {"or": [empty_task_id_condition, *completed_actions_filter]}}
+    no_tasks_query = {
+        "filter": {"and": [{"or": [empty_task_id_filter, *completed_actions_filter]}, not_on_hold_filter]}}
     actions_to_update = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, no_tasks_query, True)
 
     # 4.Create task in Todoist for each maintenance action without active link to by task_id
     for action in actions_to_update['results']:
+        labels = []
         try:
-            title = action['properties']['Sub-Topic']['title'][0]['plain_text']
+            title = get_prop(action, 'Sub-Topic')[0]['plain_text']
+            if len(get_prop(action, 'Master Tags')) > 0:
+                temp_list = list(tag['text'] for tag in get_prop(action, 'TodoistTags')['array'])
+                labels = list(x['plain_text'] for x in itertools.chain(*temp_list))
             _LOG.debug(f"creating task for action {title}")
             try:
-                # Notion bug? where it doesn't put date in Next action if formula result is 'now()'
-                due_date = {"string": action['properties']['Next action']['formula']['date']['start']}
+                # Notion bug where it doesn't put date in Next action in some cases(e.x. if formula result is 'now()')
+                due_date = {"string": get_prop(action, 'Next action')['date']['start']}
             except TypeError as e:
                 _LOG.error(f"Error during parsing Next Action date property of {title}:", str(e))
                 due_date = {"string": "today"}
         except Exception as e:
             _LOG.error("Error during parsing action action properties:", str(e))
             continue
-        task = todoist_api.items.add(title, project_id=secrets.MAINTENANCE_PROJECT_ID, due=due_date)
+
+        label_ids = list(label['id'] for label in todoist_api.labels.all(lambda l: l['name'] in labels))
+        task = todoist_api.items.add(title, project_id=secrets.MAINTENANCE_PROJECT_ID, labels=label_ids, due=due_date)
         _LOG.debug(task)
         action.update({"created_task": task})
     todoist_api.commit()
