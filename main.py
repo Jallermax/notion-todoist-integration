@@ -5,6 +5,7 @@ import pytz
 import itertools
 import secrets
 import notion
+import notion_api
 import todoist
 from notion import PropertyFormatter as pformat
 
@@ -54,6 +55,8 @@ def gather_metadata(todoist_api: todoist.TodoistAPI = None):
     # Notion
     # db_list = notion.read_databases_list()
     # print("databases list: ", db_list)
+    n_api = notion_api.NotionApi(token=secrets.NOTION_TOKEN)
+    maintenance_metadata = n_api.databases.get_info(secrets.MAINTENANCE_DATABASE_ID)
     maintenance_metadata = notion.read_database_metadata(secrets.MAINTENANCE_DATABASE_ID)
     print("Maintenance DB metadata:")
     p_dict = {k: {'type': v['type'], v['type']: v[v['type']] if len(v[v['type']]) > 0 else None} for k, v in
