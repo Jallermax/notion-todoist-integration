@@ -7,6 +7,7 @@ import secrets
 import notion
 import todoist
 from notion import PropertyFormatter as pformat
+from notion import PropertyParser as pparser
 
 LOCAL_TIMEZONE = pytz.timezone("Europe/Moscow")
 
@@ -62,10 +63,6 @@ def gather_metadata(todoist_api: todoist.TodoistAPI = None):
           f"properties: {p_dict}")
 
 
-def get_prop(action, name):
-    return action['properties'][name][action['properties'][name]['type']]
-
-
 def main():
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
@@ -82,9 +79,9 @@ def main():
 
     history_records_ids = []
     for action in completed_actions['results']:
+        # TODO find a better way to reduce to complete_date
         completed_task = list(filter(
-            lambda ct: str(ct['task_id']) == get_prop(action, 'TodoistTaskId')[0]['plain_text'],
-            completed_tasks))[0]  # TODO find a better way to reduce to complete_date
+            lambda ct: str(ct['task_id']) == pparser.rich_text(action, 'TodoistTaskId'), completed_tasks))[0]
         detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
         history_records_ids.append(create_history_record(action['id'], detailed_task)['id'])
 
@@ -101,14 +98,14 @@ def main():
     for action in actions_to_update['results']:
         labels = []
         try:
-            title = get_prop(action, 'Sub-Topic')[0]['plain_text']
-            if len(get_prop(action, 'Master Tags')) > 0:
-                temp_list = list(tag['text'] for tag in get_prop(action, 'TodoistTags')['array'])
+            title = pparser.title(action, 'Sub-Topic')
+            if len(pparser.generic_prop(action, 'Master Tags')) > 0:
+                temp_list = list(tag['text'] for tag in pparser.generic_prop(action, 'TodoistTags')['array'])
                 labels = list(x['plain_text'] for x in itertools.chain(*temp_list))
             _LOG.debug(f"creating task for action {title}")
             try:
                 # Notion bug where it doesn't put date in Next action in some cases(e.x. if formula result is 'now()')
-                due_date = {"string": get_prop(action, 'Next action')['date']['start']}
+                due_date = {"string": pparser.formula_start_date(action, 'Next action')}
             except TypeError as e:
                 _LOG.error(f"Error during parsing Next Action date property of {title}:", str(e))
                 due_date = {"string": "today"}

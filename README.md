@@ -8,6 +8,9 @@ Each 20 seconds runs workflow of creating history records to Notion for each com
 * Decouple notion module as separate lib
 * Increase robustness (check for changes in DB namings, imply possibility of manual changing task id or deleting task,
   rollback on errors in workflow)
+* Optimization ideas for *sync*:
+  * Save page_id in Todoist task description instead of task_id in actions
+  * Create history_records on task creation and update completed date on completion
 
 **Feature plan:**</br>
 * Save task comments to notion history

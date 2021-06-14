@@ -102,3 +102,25 @@ class PropertyFormatter:
     @staticmethod
     def checkbox(value: bool):
         return {"checkbox": value}
+
+
+class PropertyParser:
+
+    @staticmethod
+    def generic_prop(action, name):
+        return action['properties'][name][action['properties'][name]['type']]
+
+    @staticmethod
+    def rich_text(page: dict, name: str):
+        prop = page['properties'][name]['rich_text']
+        return None if len(prop) == 0 else prop[0]['plain_text']
+
+    @staticmethod
+    def title(page: dict, name: str):
+        prop = page['properties'][name]['title']
+        return None if len(prop) == 0 else prop[0]['plain_text']
+
+    @staticmethod
+    def formula_start_date(page: dict, name: str):
+        prop = page['properties'][name]['formula']
+        return None if len(prop) == 0 else prop['date']['start']
