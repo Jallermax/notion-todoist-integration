@@ -13,7 +13,6 @@ Each 20 seconds runs workflow of creating history records to Notion for each com
   * Create history_records on task creation and update completed date on completion
 
 **Feature plan:**</br>
-* Save task comments to notion history
 * Webhook triggers (run on notion page update?)
 * Add explicit error notification (to tg bot for example)
 * Think about workflow with repeatable tasks (any pros except better visibility in todoist?)
