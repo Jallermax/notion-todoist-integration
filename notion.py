@@ -28,18 +28,26 @@ def read_databases_list(**kwargs):
     return res.json()
 
 
-def read_database(database_id, query=None, log_to_file=False):
+def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True):
+    data = []
+    query = raw_query
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
+    has_more = True
+    while has_more:
+        if not query:
+            res = requests.post(url, headers=headers)
+        else:
+            res = requests.post(url, headers=headers, json=query)
+        if not process_response(res):
+            return
+        data.extend(res.json()['results'])
+        has_more = all_batch & res.json()['has_more']
+        if has_more:
+            if not query:
+                query = {}
+            query.update({'start_cursor': res.json()['next_cursor']})
 
-    if not query:
-        res = requests.post(url, headers=headers)
-    else:
-        res = requests.post(url, headers=headers, json=query)
-    if not process_response(res):
-        return
-
-    data = res.json()
-    _LOG.info(f"Received {len(data['results'])} records")
+    _LOG.info(f"Received {len(data)} records")
     if log_to_file:
         with open('test/db.json', 'w', encoding='utf8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -92,6 +100,10 @@ class PropertyFormatter:
         return {"rich_text": [{"text": {"content": text, "link": {"url": link}}}]}
 
     @staticmethod
+    def rich_text_page_mention(page_id: str):
+        return {"rich_text": [{"mention": {"page": {"id": page_id}}}]}
+
+    @staticmethod
     def date(value: str):
         return {"date": {"start": value}}
 
@@ -102,6 +114,44 @@ class PropertyFormatter:
     @staticmethod
     def checkbox(value: bool):
         return {"checkbox": value}
+
+    @staticmethod
+    def select(name):
+        return {"select": {"name": name}}
+
+    @staticmethod
+    def heading_block(text, header_num=3):
+        if not [1, 2, 3].__contains__(header_num):
+            _LOG.warning(f"Wrong {header_num=}. Should be one of [1, 2, 3]")
+            header_num = 3
+        block_type = "heading_" + str(header_num)
+        return {
+            "object": "block",
+            "type": block_type,
+            block_type: {
+                "text": [{"type": "text", "text": {"content": text}}]
+            }
+        }
+
+    @staticmethod
+    def paragraph_blocks(*text_blocks):
+        return {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "text": list({"type": "text", "text": {"content": n}} for n in list(*text_blocks))
+            }
+        }
+
+    @staticmethod
+    def paragraph_mention_blocks(*page_ids):
+        return {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "text": list({"mention": {"page": {"id": p_id}}} for p_id in page_ids)
+            }
+        }
 
 
 class PropertyParser:
