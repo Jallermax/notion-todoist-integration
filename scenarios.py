@@ -58,10 +58,23 @@ def create_action_entry(tag_mapping, task):
     if tags:
         child_blocks.append(pformat.heading_block("Tags", 3))
         child_blocks.append(pformat.paragraph_mention_blocks(*tags))
-    print(f"{notion_task=}\n{child_blocks=}")
+    _LOG.debug(f" Adding {notion_task=}\n{child_blocks=}")
     res = notion.create_page(secrets.MASTER_TASKS_DB_ID,
                              *child_blocks, **notion_task)
-    print(f"{res=}")
+    _LOG.debug(f"{res=}")
+
+
+def get_recent_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3):
+    if not todoist_api:
+        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+        todoist_api.sync()
+    # TODO loop through activities with offset if > limit
+    events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
+    created_tasks = list(x['object_id'] for x in filter(
+        lambda x: datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
+                    datetime.datetime.now() - datetime.timedelta(days=days_old)), events))
+    all_tasks = todoist_api.items.all(lambda x: (created_tasks.__contains__(x['id']) and x['checked'] == 0))
+    return all_tasks
 
 
 def append_notes_to_tasks(all_tasks, todoist_api: todoist.TodoistAPI = None):
@@ -182,13 +195,15 @@ def sync_periodic_actions():
             update_task_id(atu['id'], atu['created_task']['id'])
 
 
-def sync_all_tasks():
+def sync_created_tasks():
     # content->title, todoist id, notes->paragraph block, label->Tag Vault, priority (not yet: creation time, due date)
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
 
     # 1.Get tasks with notes from Todoist
-    all_tasks = todoist_api.items.all()
+    # all_tasks = todoist_api.items.all()
+    all_tasks = get_recent_tasks(todoist_api, 2)
+
     append_notes_to_tasks(all_tasks, todoist_api)
 
     # 2.Get Notion Tag/Knowledge vault and create 'Todoist_tag to Notion Tag page_id' mapping

@@ -41,7 +41,7 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
         if not process_response(res):
             return
         data.extend(res.json()['results'])
-        has_more = all_batch & res.json()['has_more']
+        has_more = all_batch and res.json()['has_more']
         if has_more:
             if not query:
                 query = {}
