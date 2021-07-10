@@ -4,13 +4,14 @@ import pytz
 import itertools
 import secrets
 import notion
+import todoist_utils
 import todoist
 
 from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
 
 _LOG = logging.getLogger(__name__)
-LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
+LOCAL_TIMEZONE = pytz.timezone('Europe/Moscow')
 
 
 def update_task_id(page_id, task_id):
@@ -18,14 +19,14 @@ def update_task_id(page_id, task_id):
     notion.update_page(page_id, TodoistTaskId=pformat.rich_text_link(str(task_id), task_link))
 
 
-def create_history_record(action_id, task):
+def create_history_record(action_id, task) -> (bool, object):
     task_id = str(task['id'])
     dt = task['date_completed']
     desc = task['description']
     child_blocks = []
     if task['notes']:
         child_blocks.append(pformat.heading_block("Notes", 2))
-        child_blocks.append(pformat.paragraph_blocks(task['notes']))
+        child_blocks.append(pformat.paragraph_text_block(task['notes']))
 
     if dt:
         dt = LOCAL_TIMEZONE.normalize(
@@ -45,23 +46,48 @@ def create_history_record(action_id, task):
 
 def create_action_entry(tag_mapping, task):
     priority_mapper = {1: 'p4', 2: 'p3', 3: 'p2', 4: 'p1'}
+    project_mapper = {2219986415: '3142b10bfeac4b669a24d4603efb2f3a',  # ML career path
+                      2267650566: 'b3ab76ee27634672b6fa966415248e5d'}  # Integration app
     child_blocks = []
     if task['notes']:
         child_blocks.append(pformat.heading_block("Notes", 2))
-        child_blocks.append(pformat.paragraph_blocks(task['notes']))
+        child_blocks.append(pformat.paragraph_text_block(task['notes']))
     tags = list(tag_mapping[i] for i in filter(lambda l: tag_mapping.__contains__(l), task['labels']))
     task_link = f"https://todoist.com/showTask?id={task['id']}"
     notion_task = {'Name': pformat.title(task['content']),
                    'Priority': pformat.select(priority_mapper[task['priority']]),
                    'TodoistTaskId': pformat.rich_text_link(str(task['id']), task_link),
                    'Done': pformat.checkbox(bool(task['checked']))}
+    if project_mapper.__contains__(task['project_id']):
+        notion_task.update({'Projects': pformat.relation(project_mapper[task['project_id']])})
     if tags:
         child_blocks.append(pformat.heading_block("Tags", 3))
-        child_blocks.append(pformat.paragraph_mention_blocks(*tags))
-    _LOG.debug(f" Adding {notion_task=}\n{child_blocks=}")
-    res = notion.create_page(secrets.MASTER_TASKS_DB_ID,
-                             *child_blocks, **notion_task)
-    _LOG.debug(f"{res=}")
+        child_blocks.append(pformat.paragraph_mention_block(*tags))
+    success, page = notion.create_page(secrets.MASTER_TASKS_DB_ID,
+                                       *child_blocks, **notion_task)
+    if success:
+        _LOG.info(f"Page created: https://www.notion.so/jallermax/{page['id']}")
+    else:
+        _LOG.error(f"Error creating page from {task=}: {page}")
+
+
+def create_action_entry_v2(task):
+    notion_task = {'Name': pformat.title(task['content']),
+                   'Done': pformat.checkbox(bool(task['checked']))}
+
+    # TODO iterate through all keys in mappings for particular scenario instead of manually map each property type
+    _, child_blocks = todoist_utils.map_property(task, 'id', notion_task)
+    todoist_utils.map_property(task, 'notes', notion_task, child_blocks)
+    todoist_utils.map_priority(task, notion_task, child_blocks)
+    todoist_utils.map_project(task, notion_task, child_blocks)
+    todoist_utils.map_labels(task, notion_task, child_blocks)
+
+    success, page = notion.create_page(secrets.MASTER_TASKS_DB_ID,
+                                       *child_blocks, **notion_task)
+    if success:
+        _LOG.info(f"Page created: {page['url']}")
+    else:
+        _LOG.error(f"Error creating page from {task=}\n\t{notion_task=}\n\t{child_blocks=}\n\t{page}")
 
 
 def get_recent_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3):
@@ -70,9 +96,10 @@ def get_recent_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3):
         todoist_api.sync()
     # TODO loop through activities with offset if > limit
     events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
+    _LOG.debug(f"Received {len(events)} events for the last {days_old} days")
     created_tasks = list(x['object_id'] for x in filter(
         lambda x: datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
-                    datetime.datetime.now() - datetime.timedelta(days=days_old)), events))
+                datetime.datetime.now() - datetime.timedelta(days=days_old)), events))
     all_tasks = todoist_api.items.all(lambda x: (created_tasks.__contains__(x['id']) and x['checked'] == 0))
     return all_tasks
 
@@ -88,21 +115,6 @@ def append_notes_to_tasks(all_tasks, todoist_api: todoist.TodoistAPI = None):
             if note['item_id'] == task['id']:
                 notes.append(note['content'])
         task['notes'] = notes
-
-
-def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None):
-    if not todoist_api:
-        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
-        todoist_api.sync()
-    labels = todoist_api.labels.all()
-    notion_tags = list(
-        filter(lambda x: pparser.rich_text(x, 'Todoist Tags'), notion.read_database(secrets.MASTER_TAG_DB)))
-    notion_tags = {pparser.rich_text(page, 'Todoist Tags'): page['id'] for page in notion_tags}
-    labels = {label['name']: label['id'] for label in labels}
-    tag_mapping = {}
-    for key in notion_tags:
-        tag_mapping[labels[key]] = notion_tags[key]
-    return tag_mapping
 
 
 def gather_metadata(todoist_api: todoist.TodoistAPI = None):
@@ -148,7 +160,9 @@ def sync_periodic_actions():
             lambda ct: str(ct['task_id']) == pparser.rich_text(action, 'TodoistTaskId'), completed_tasks))[0]
         detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
         append_notes_to_tasks([detailed_task], todoist_api)
-        history_records_ids.append(create_history_record(action['id'], detailed_task)['id'])
+        success, page = create_history_record(action['id'], detailed_task)
+        if success:
+            history_records_ids.append(page['id'])
 
     # 3.Gather notion maintenance actions [without TodoistTaskId and not OnHold] or [completed from previous step]
     empty_task_id_filter = {"property": "TodoistTaskId", "text": {"is_empty": True}}
@@ -202,12 +216,12 @@ def sync_created_tasks():
 
     # 1.Get tasks with notes from Todoist
     # all_tasks = todoist_api.items.all()
-    all_tasks = get_recent_tasks(todoist_api, 2)
+    all_tasks = get_recent_tasks(todoist_api, 15)
 
     append_notes_to_tasks(all_tasks, todoist_api)
 
     # 2.Get Notion Tag/Knowledge vault and create 'Todoist_tag to Notion Tag page_id' mapping
-    tag_mapping = get_label_tag_mapping(todoist_api)
+    tag_mapping = todoist_utils.get_label_tag_mapping(todoist_api)
 
     # 3. Get already created linked actions not to create dupes
     linked_actions_query = {"filter": {"property": "TodoistTaskId", "text": {"is_not_empty": True}}}
@@ -219,4 +233,5 @@ def sync_created_tasks():
         if linked_task_ids.__contains__(str(task['id'])):
             print(f"linked task {task['id']=}; {task['content']}")
             continue
-        create_action_entry(tag_mapping, task)
+        # create_action_entry(tag_mapping, task)
+        create_action_entry_v2(task)

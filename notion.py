@@ -47,7 +47,7 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
                 query = {}
             query.update({'start_cursor': res.json()['next_cursor']})
 
-    _LOG.info(f"Received {len(data)} records")
+    _LOG.info(f"Received {len(data)} records for {database_id=}")
     if log_to_file:
         with open('test/db.json', 'w', encoding='utf8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -63,7 +63,7 @@ def create_page(parent_id, *args, **kwargs):
         params.update({"children": args})
     res = requests.post(url, headers=headers, json=params)
     process_response(res)
-    return res.json()
+    return process_response(res), res.json()
 
 
 def update_page(page_id, **kwargs):
@@ -74,7 +74,7 @@ def update_page(page_id, **kwargs):
     process_response(res)
 
 
-def process_response(res, log=True):
+def process_response(res, log=False):
     if res.status_code != 200:
         _LOG.error(f"Got response for {res.request.method} {res.request.url}")
         _LOG.error(f"Error message: {json.dumps(res.json(), ensure_ascii=False, indent=2)}")
@@ -85,42 +85,52 @@ def process_response(res, log=True):
     return True
 
 
+def flatten_properties(*formatted_prop):
+    flattened_props = []
+    for fp in list(formatted_prop):
+        if 'rich_text' in fp.keys():
+            flattened_props.extend(fp['rich_text'])
+        else:
+            flattened_props.append(fp)
+    return flattened_props
+
+
 class PropertyFormatter:
 
     @staticmethod
-    def title(value: str):
+    def title(value: str, **kwargs):
         return {"title": [{"text": {"content": value}}]}
 
     @staticmethod
-    def rich_text(value: str):
+    def rich_text(value: str, **kwargs):
         return {"rich_text": [{"text": {"content": value}}]}
 
     @staticmethod
-    def rich_text_link(text: str, link: str):
+    def rich_text_link(text: str, link: str, **kwargs):
         return {"rich_text": [{"text": {"content": text, "link": {"url": link}}}]}
 
     @staticmethod
-    def rich_text_page_mention(page_id: str):
+    def rich_text_page_mention(page_id: str, **kwargs):
         return {"rich_text": [{"mention": {"page": {"id": page_id}}}]}
 
     @staticmethod
-    def date(value: str):
+    def date(value: str, **kwargs):
         return {"date": {"start": value}}
 
     @staticmethod
-    def relation(page_id: str):
+    def relation(page_id: str, **kwargs):
         return {"relation": [{"id": page_id}]}
 
     @staticmethod
-    def checkbox(value: bool):
+    def checkbox(value: bool, **kwargs):
         return {"checkbox": value}
 
     @staticmethod
-    def select(name):
+    def select(name, **kwargs):
         return {"select": {"name": name}}
 
     @staticmethod
-    def heading_block(text, header_num=3):
+    def heading_block(text, header_num=3, **kwargs):
         if not [1, 2, 3].__contains__(header_num):
             _LOG.warning(f"Wrong {header_num=}. Should be one of [1, 2, 3]")
             header_num = 3
@@ -134,17 +144,27 @@ class PropertyFormatter:
         }
 
     @staticmethod
-    def paragraph_blocks(*text_blocks):
+    def paragraph_block(*formatted_prop, **kwargs):
         return {
             "object": "block",
             "type": "paragraph",
             "paragraph": {
-                "text": list({"type": "text", "text": {"content": n}} for n in list(*text_blocks))
+                "text": flatten_properties(*formatted_prop)
             }
         }
 
     @staticmethod
-    def paragraph_mention_blocks(*page_ids):
+    def paragraph_text_block(*text, **kwargs):
+        return {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "text": list({"type": "text", "text": {"content": n}} for n in list(*text))
+            }
+        }
+
+    @staticmethod
+    def paragraph_mention_block(*page_ids, **kwargs):
         return {
             "object": "block",
             "type": "paragraph",

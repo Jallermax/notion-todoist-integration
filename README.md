@@ -4,7 +4,6 @@ secrets.py needs to be crated and filled using template_secrets.py
 
 **Technical TODO:**
 * Setup CI/DI + project structure improvement
-* Limit completed tasks query by time (1-7 day before now)
 * Improve logging of each api call (log all params) and on logic workflow
 * Refactor workflow for better readability (for reuse and GUI later)
 * Decouple notion module as separate lib

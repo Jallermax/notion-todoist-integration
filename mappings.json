@@ -1,0 +1,110 @@
+{
+  "priority": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Priority",
+      "type": "select"
+    },
+    "values": {
+      "1": {
+        "value": "p4"
+      },
+      "2": {
+        "value": "p3"
+      },
+      "3": {
+        "value": "p2"
+      },
+      "4": {
+        "value": "p1"
+      }
+    }
+  },
+  "labels": {
+    "none_strategy": "map-by-name",
+    "link": "https://todoist.com/app/label/{}",
+    "default_values": {
+      "name": "Todoist Tags",
+      "type": "paragraph_mention_block"
+    },
+    "values": {
+      "2157061836": {
+        "name": "Projects",
+        "type": "relation",
+        "value": "3142b10bfeac4b669a24d4603efb2f3a",
+        "comment": "ML career path"
+      },
+      "1611137796": {
+        "name": "POM",
+        "type": "select",
+        "value": "🍅"
+      },
+      "1611137912": {
+        "name": "POM",
+        "type": "select",
+        "value": "🍅"
+      },
+      "1611137916": {
+        "name": "POM",
+        "type": "select",
+        "value": "🍅🍅"
+      },
+      "1611137917": {
+        "name": "POM",
+        "type": "select",
+        "value": "🍅🍅🍅"
+      },
+      "2157134968": {
+        "name": "Mindset",
+        "type": "select",
+        "value": "Maintenance"
+      },
+      "2157135027": {
+        "name": "Mindset",
+        "type": "select",
+        "value": "Creative"
+      },
+      "2157134993": {
+        "name": "Mindset",
+        "type": "select",
+        "value": "Communication"
+      }
+    }
+  },
+  "project_id": {
+    "none_strategy": "ignore",
+    "link": "https://todoist.com/app/project/{}",
+    "default_values": {
+      "name": "Todoist Tags",
+      "type": "paragraph_mention_block"
+    },
+    "values": {
+      "2219986415": {
+        "name": "Projects",
+        "type": "relation",
+        "value": "3142b10bfeac4b669a24d4603efb2f3a",
+        "comment": "ML career path"
+      },
+      "2267650566": {
+        "name": "Projects",
+        "type": "relation",
+        "value": "b3ab76ee27634672b6fa966415248e5d",
+        "comment": "Integration app"
+      }
+    }
+  },
+  "notes": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "type": "paragraph_text_block"
+    }
+  },
+  "id": {
+    "none_strategy": "value-as-is",
+    "link": "https://todoist.com/showTask?id={}",
+    "default_values": {
+      "name": "TodoistTaskId",
+      "type": "rich_text_link"
+    }
+  }
+}
