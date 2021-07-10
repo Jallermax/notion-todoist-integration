@@ -14,6 +14,7 @@ class NotionPropType(Enum):
 
 
 def load_todoist_to_notion_mapper():
+    # TODO add file parametric based on running scenario + caching
     file = open("mappings.json", "r")
 
     contents = file.read()
@@ -44,8 +45,10 @@ def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None):
 
 
 def get_notion_formatter_mapper():
-    return {'rich_text_link': (pformat.rich_text_link, NotionPropType.PROPERTY),
+    return {'title': (pformat.title, NotionPropType.PROPERTY),
+            'rich_text_link': (pformat.rich_text_link, NotionPropType.PROPERTY),
             'select': (pformat.select, NotionPropType.PROPERTY),
+            'checkbox': (pformat.checkbox, NotionPropType.PROPERTY),
             'relation': (pformat.relation, NotionPropType.PROPERTY),
             'paragraph_text_block': (pformat.paragraph_text_block, NotionPropType.CHILD_BLOCK),
             'paragraph_mention_block': (pformat.paragraph_mention_block, NotionPropType.CHILD_BLOCK)}

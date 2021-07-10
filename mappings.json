@@ -34,6 +34,12 @@
         "value": "3142b10bfeac4b669a24d4603efb2f3a",
         "comment": "ML career path"
       },
+      "2149478237": {
+        "name": "Outcomes",
+        "type": "relation",
+        "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
+        "comment": "finances"
+      },
       "1611137796": {
         "name": "POM",
         "type": "select",
@@ -105,6 +111,30 @@
     "default_values": {
       "name": "TodoistTaskId",
       "type": "rich_text_link"
+    }
+  },
+  "content": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Name",
+      "type": "title"
+    }
+  },
+  "checked": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Done",
+      "type": "checkbox"
+    },
+    "values": {
+      "0": {
+        "type": "checkbox",
+        "value": False
+      },
+      "1": {
+        "type": "checkbox",
+        "value": True
+      }
     }
   }
 }
