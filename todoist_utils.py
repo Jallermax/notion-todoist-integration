@@ -88,6 +88,7 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
         child_blocks = []
 
     mappings = load_todoist_to_notion_mapper()['labels']
+    # TODO add caching of label_tag_mapping
     label_mapper = get_label_tag_mapping()
 
     for label in task['labels']:
