@@ -3,21 +3,8 @@
     "none_strategy": "value-as-is",
     "default_values": {
       "name": "Priority",
-      "type": "select"
-    },
-    "values": {
-      "1": {
-        "value": "p4"
-      },
-      "2": {
-        "value": "p3"
-      },
-      "3": {
-        "value": "p2"
-      },
-      "4": {
-        "value": "p1"
-      }
+      "type": "select",
+      "expression": "'p' + str(5-value)"
     }
   },
   "labels": {
@@ -81,21 +68,21 @@
     "none_strategy": "ignore",
     "link": "https://todoist.com/app/project/{}",
     "default_values": {
-      "name": "Todoist Tags",
-      "type": "paragraph_mention_block"
+      "name": "Projects",
+      "type": "relation"
     },
     "values": {
       "2219986415": {
-        "name": "Projects",
-        "type": "relation",
         "value": "3142b10bfeac4b669a24d4603efb2f3a",
         "comment": "ML career path"
       },
       "2267650566": {
-        "name": "Projects",
-        "type": "relation",
         "value": "b3ab76ee27634672b6fa966415248e5d",
         "comment": "Integration app"
+      },
+      "2269312293": {
+        "value": "ac0eedc1713d4fd4a40fffe073c18e74",
+        "comment": "Notion Organization"
       }
     }
   },
@@ -125,16 +112,6 @@
     "default_values": {
       "name": "Done",
       "type": "checkbox"
-    },
-    "values": {
-      "0": {
-        "type": "checkbox",
-        "value": False
-      },
-      "1": {
-        "type": "checkbox",
-        "value": True
-      }
     }
   }
 }

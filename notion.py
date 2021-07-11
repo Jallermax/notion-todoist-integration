@@ -98,19 +98,24 @@ def flatten_properties(*formatted_prop):
 class PropertyFormatter:
 
     @staticmethod
-    def title(value: str, **kwargs):
+    def title(value, **kwargs):
+        value = value if isinstance(value, str) else str(value)
         return {"title": [{"text": {"content": value}}]}
 
     @staticmethod
-    def rich_text(value: str, **kwargs):
+    def rich_text(value, **kwargs):
+        value = value if isinstance(value, str) else str(value)
         return {"rich_text": [{"text": {"content": value}}]}
 
     @staticmethod
-    def rich_text_link(text: str, link: str, **kwargs):
+    def rich_text_link(text, link, **kwargs):
+        text = text if isinstance(text, str) else str(text)
+        link = link if isinstance(link, str) else str(link)
         return {"rich_text": [{"text": {"content": text, "link": {"url": link}}}]}
 
     @staticmethod
-    def rich_text_page_mention(page_id: str, **kwargs):
+    def rich_text_page_mention(page_id, **kwargs):
+        page_id = page_id if isinstance(page_id, str) else str(page_id)
         return {"rich_text": [{"mention": {"page": {"id": page_id}}}]}
 
     @staticmethod
@@ -118,15 +123,18 @@ class PropertyFormatter:
         return {"date": {"start": value}}
 
     @staticmethod
-    def relation(page_id: str, **kwargs):
+    def relation(page_id, **kwargs):
+        page_id = page_id if isinstance(page_id, str) else str(page_id)
         return {"relation": [{"id": page_id}]}
 
     @staticmethod
-    def checkbox(value: bool, **kwargs):
+    def checkbox(value, **kwargs):
+        value = value if isinstance(value, bool) else bool(value)
         return {"checkbox": value}
 
     @staticmethod
     def select(name, **kwargs):
+        name = name if isinstance(name, str) else str(name)
         return {"select": {"name": name}}
 
     @staticmethod
@@ -155,23 +163,14 @@ class PropertyFormatter:
 
     @staticmethod
     def paragraph_text_block(*text, **kwargs):
-        return {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "text": list({"type": "text", "text": {"content": n}} for n in list(*text))
-            }
-        }
+        rich_text_list = [PropertyFormatter.rich_text_link(txt, kwargs['link']) for txt in
+                          text] if 'link' in kwargs.keys() else [PropertyFormatter.rich_text(txt) for txt in text]
+        return PropertyFormatter.paragraph_block(*rich_text_list)
 
     @staticmethod
     def paragraph_mention_block(*page_ids, **kwargs):
-        return {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "text": list({"mention": {"page": {"id": p_id}}} for p_id in page_ids)
-            }
-        }
+        return PropertyFormatter.paragraph_block(
+            *[PropertyFormatter.rich_text_page_mention(page_id) for page_id in page_ids])
 
 
 class PropertyParser:

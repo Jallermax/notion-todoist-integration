@@ -1,4 +1,4 @@
-Each 60 seconds runs workflow of creating history records to Notion for each completed Todoist task linked with Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one.</br>
+Every 60 seconds runs workflow of creating history records to Notion for each completed Todoist task linked with Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one.</br>
 
 secrets.py needs to be crated and filled using template_secrets.py
 
@@ -9,6 +9,7 @@ secrets.py needs to be crated and filled using template_secrets.py
 * Decouple notion module as separate lib
 * Increase robustness (check for changes in DB namings, imply possibility of manual changing task id or deleting task,
   rollback on errors in workflow)
+* Add mappings.json schema validation 
 * Optimization ideas for *sync*:
   * Save page_id in Todoist task description instead of task_id in actions
   * Create history_records on task creation and update completed date on completion
