@@ -58,7 +58,7 @@ def get_default_values():
     return {'type': 'paragraph_text_block'}
 
 
-def map_property(task, prop_name, props: dict = None, child_blocks: list = None):
+def map_property(task: dict, prop_name: str, props: dict = None, child_blocks: list = None):
     if isinstance(props, type(None)):
         props = {}
     if isinstance(child_blocks, type(None)):
@@ -128,14 +128,14 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
     return props, child_blocks
 
 
-def parse_prop(task, prop_key):
-    if not task[prop_key]:
+def parse_prop(task: dict, prop_key):
+    if not task or not task.get(prop_key):
         return None, None
 
     # TODO add list parsing if isinstance(task[prop_key], list)
-    todoist_val = str(task[prop_key])
+    todoist_val = task[prop_key]
     mappings = load_todoist_to_notion_mapper()[prop_key]
-    notion_prop = mappings.get('values', {}).get(todoist_val)
+    notion_prop = mappings.get('values', {}).get(str(todoist_val))
     default_notion_values = mappings.get('default_values', get_default_values())
 
     # Parse mapped property value according to mapping file
@@ -164,7 +164,7 @@ def parse_prop(task, prop_key):
         link = mappings.get('link').format(todoist_val)
 
     if 'expression' in default_notion_values.keys():
-        todoist_val = eval(default_notion_values.get('expression'), {'value': task[prop_key]})
+        todoist_val = eval(default_notion_values.get('expression'), {'value': todoist_val})
 
     if formatter['is_property']:
         if link:
