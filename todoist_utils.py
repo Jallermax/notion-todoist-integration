@@ -1,5 +1,6 @@
 import ast
 from enum import Enum
+from functools import reduce
 
 import secrets
 import todoist
@@ -58,7 +59,11 @@ def get_default_values():
     return {'type': 'paragraph_text_block'}
 
 
-def map_property(task: dict, prop_name: str, props: dict = None, child_blocks: list = None):
+def deep_get(dictionary, keys, default=None):
+    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
+
+
+def map_property(task, prop_name: str, props: dict = None, child_blocks: list = None):
     if isinstance(props, type(None)):
         props = {}
     if isinstance(child_blocks, type(None)):
@@ -128,12 +133,12 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
     return props, child_blocks
 
 
-def parse_prop(task: dict, prop_key):
-    if not task or not task.get(prop_key):
+def parse_prop(task, prop_key):
+    if not task or not deep_get(task.data, prop_key):
         return None, None
 
     # TODO add list parsing if isinstance(task[prop_key], list)
-    todoist_val = task[prop_key]
+    todoist_val = deep_get(task.data, prop_key)
     mappings = load_todoist_to_notion_mapper()[prop_key]
     notion_prop = mappings.get('values', {}).get(str(todoist_val))
     default_notion_values = mappings.get('default_values', get_default_values())

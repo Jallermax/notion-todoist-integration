@@ -19,6 +19,8 @@ secrets.py needs to be crated and filled using template_secrets.py
 * Add explicit error notification (to tg bot for example)
 * Think about workflow with repeatable tasks (any pros except better visibility in todoist?)
 * See list and statuses of all scenarios/workflows, enable/disable without app restart
+* Parse todoist link format to rich_text_link Notion formatter
+* Add 2-way sync (added + changes from Todoist-to-Notion and from Notion-to-Todoist)
 ---
 **Gui (long term plan)**
 * GUI for visualizing job schedule and status
