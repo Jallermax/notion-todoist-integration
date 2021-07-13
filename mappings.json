@@ -113,5 +113,12 @@
       "name": "Done",
       "type": "checkbox"
     }
+  },
+  "due.date": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Date",
+      "type": "date"
+    }
   }
 }

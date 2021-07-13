@@ -1,9 +1,12 @@
+import datetime
 import json
 import logging
+import pytz
 import requests
 import secrets
 
 _LOG = logging.getLogger(__name__)
+LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
 headers = {
     "Authorization": "Bearer " + secrets.NOTION_TOKEN,
@@ -119,7 +122,12 @@ class PropertyFormatter:
         return {"rich_text": [{"mention": {"page": {"id": page_id}}}]}
 
     @staticmethod
-    def date(value: str, **kwargs):
+    def date(value: str, localize=True, **kwargs):
+        if localize:
+            if len(value) == 20:
+                value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
+            elif len(value) == 19:
+                value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")).isoformat()
         return {"date": {"start": value}}
 
     @staticmethod

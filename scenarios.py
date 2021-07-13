@@ -11,7 +11,7 @@ from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
 
 _LOG = logging.getLogger(__name__)
-LOCAL_TIMEZONE = pytz.timezone('Europe/Moscow')
+LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
 
 def update_task_id(page_id, task_id):
@@ -39,7 +39,7 @@ def create_history_entry(action_id, task) -> (bool, object):
     return notion.create_page(secrets.HISTORY_DATABASE_ID,
                               *child_blocks,
                               Record=pformat.title(title),
-                              Completed=pformat.date(dt.isoformat()),
+                              Completed=pformat.date(dt.date().isoformat(), localize=False),
                               Action=pformat.relation(action_id),
                               TodoistTaskId=pformat.rich_text_link(task_id, task_link))
 
@@ -47,6 +47,7 @@ def create_history_entry(action_id, task) -> (bool, object):
 def create_action_entry(task):
     # TODO iterate through all keys in mappings for particular scenario instead of manually map each property type
     notion_task, child_blocks = todoist_utils.map_property(task, 'content')
+    todoist_utils.map_property(task, 'due.date', notion_task, child_blocks)
     todoist_utils.map_property(task, 'id', notion_task, child_blocks)
     todoist_utils.map_property(task, 'checked', notion_task, child_blocks)
     todoist_utils.map_property(task, 'notes', notion_task, child_blocks)

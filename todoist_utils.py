@@ -47,9 +47,11 @@ def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None):
 def get_notion_formatter_mapper():
     # TODO move 'is_property' to pformat object
     return {'title': {'method': pformat.title, 'is_property': True},
+            'rich_text': {'method': pformat.rich_text, 'is_property': True},
             'rich_text_link': {'method': pformat.rich_text_link, 'is_property': True},
             'select': {'method': pformat.select, 'is_property': True},
             'checkbox': {'method': pformat.checkbox, 'is_property': True},
+            'date': {'method': pformat.date, 'is_property': True},
             'relation': {'method': pformat.relation, 'is_property': True},
             'paragraph_text_block': {'method': pformat.paragraph_text_block, 'is_property': False},
             'paragraph_mention_block': {'method': pformat.paragraph_mention_block, 'is_property': False}}
