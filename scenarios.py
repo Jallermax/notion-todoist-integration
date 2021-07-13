@@ -62,6 +62,9 @@ def create_action_entry(task):
     else:
         _LOG.error(f"Error creating page from {task=}\n\t{notion_task=}\n\t{child_blocks=}\n\t{page}")
 
+    notion_reference = f"[Notion]({page['url']})"
+    task.update(description=notion_reference)
+
 
 def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3, get_checked=True):
     if not todoist_api:
@@ -70,10 +73,11 @@ def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3,
     # TODO loop through activities with offset if > limit
 
     events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
+    # TODO limit days_old to last successful sync saved in session
     _LOG.debug(f"Received {len(events)} events for the last {days_old} days")
-    created_tasks = list(x['object_id'] for x in filter(
-        lambda x: datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
-                datetime.datetime.now() - datetime.timedelta(days=days_old)), events))
+    created_tasks = list(x['object_id'] for x in events if
+                         datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
+                                     datetime.datetime.now() - datetime.timedelta(days=days_old)))
     all_tasks = todoist_api.items.all(
         lambda x: (created_tasks.__contains__(x['id']) and (get_checked or x['checked'] == 0)))
     return all_tasks
@@ -205,3 +209,6 @@ def sync_created_tasks(all_tasks=False):
             # print(f"linked task {task['id']=}; {task['content']}")
             continue
         create_action_entry(task)
+
+    # 4. Save Notion page reference to Todoist tasks' description
+    todoist_api.commit()
