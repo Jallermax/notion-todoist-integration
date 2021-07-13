@@ -44,19 +44,24 @@ def create_history_entry(action_id, task) -> (bool, object):
                               TodoistTaskId=pformat.rich_text_link(task_id, task_link))
 
 
-def create_action_entry(task):
+def create_action_entry(todoist_api: todoist.TodoistAPI, task):
     # TODO iterate through all keys in mappings for particular scenario instead of manually map each property type
-    notion_task, child_blocks = todoist_utils.map_property(task, 'content')
+    notion_task, child_blocks = todoist_utils.map_property(task, 'content', convert_md_links=True)
     todoist_utils.map_property(task, 'due.date', notion_task, child_blocks)
     todoist_utils.map_property(task, 'id', notion_task, child_blocks)
     todoist_utils.map_property(task, 'checked', notion_task, child_blocks)
     todoist_utils.map_property(task, 'notes', notion_task, child_blocks)
-    todoist_utils.map_priority(task, notion_task, child_blocks)
-    todoist_utils.map_project(task, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'project_id', notion_task, child_blocks)
+    todoist_utils.map_property(task, 'priority', notion_task, child_blocks)
     todoist_utils.map_labels(task, notion_task, child_blocks)
 
-    success, page = notion.create_page(secrets.MASTER_TASKS_DB_ID,
-                                       *child_blocks, **notion_task)
+    parent_page_id = todoist_utils.extract_link_to_parent(task, todoist_api)
+    if parent_page_id:
+        notion_task.update({"Waiting_for": pformat.relation(parent_page_id)})
+    synced_time = datetime.datetime.now(LOCAL_TIMEZONE).isoformat()
+    notion_task.update({"Synced": pformat.date(synced_time)})
+
+    success, page = notion.create_page(secrets.MASTER_TASKS_DB_ID, *child_blocks, **notion_task)
     if success:
         _LOG.info(f"Page created: {page['url']}")
     else:
@@ -66,18 +71,19 @@ def create_action_entry(task):
     task.update(description=notion_reference)
 
 
-def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=3, get_checked=True):
+def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=None, get_checked=True):
     if not todoist_api:
         todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
         todoist_api.sync()
-    # TODO loop through activities with offset if > limit
 
+    # TODO loop through activities with offset if > limit
     events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
     # TODO limit days_old to last successful sync saved in session
-    _LOG.debug(f"Received {len(events)} events for the last {days_old} days")
     created_tasks = list(x['object_id'] for x in events if
-                         datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
-                                     datetime.datetime.now() - datetime.timedelta(days=days_old)))
+                         not days_old or datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
+                                 datetime.datetime.now() - datetime.timedelta(days=days_old)))
+    _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
+        f" for the last {days_old} days" if days_old else ""))
     all_tasks = todoist_api.items.all(
         lambda x: (created_tasks.__contains__(x['id']) and (get_checked or x['checked'] == 0)))
     return all_tasks
@@ -177,7 +183,7 @@ def sync_periodic_actions():
 
         label_ids = list(label['id'] for label in todoist_api.labels.all(lambda l: l['name'] in labels))
         task = todoist_api.items.add(title, project_id=secrets.MAINTENANCE_PROJECT_ID, labels=label_ids, due=due_date)
-        _LOG.debug(task)
+        _LOG.debug(f"{task=}")
         action.update({"created_task": task})
     todoist_api.commit()
 
@@ -188,13 +194,14 @@ def sync_periodic_actions():
             update_task_id(atu['id'], atu['created_task']['id'])
 
 
-def sync_created_tasks(all_tasks=False):
-    # content->title, todoist id, notes->paragraph block, label->Tag Vault, priority (not yet: creation time, due date)
+def sync_created_tasks(all_tasks=False, sync_completed=False):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
 
     # 1.Get tasks with notes from Todoist
-    all_tasks = todoist_api.items.all() if all_tasks else get_recently_added_tasks(todoist_api, 15)
+    all_tasks = todoist_api.items.all(
+        lambda t: sync_completed or t['checked'] == 0) if all_tasks else get_recently_added_tasks(
+        todoist_api, get_checked=sync_completed)
 
     append_notes_to_tasks(all_tasks, todoist_api)
 
@@ -204,11 +211,11 @@ def sync_created_tasks(all_tasks=False):
     linked_task_ids = list(pparser.rich_text(action, 'TodoistTaskId') for action in linked_actions)
 
     # 3. Create not yet linked actions/tasks in Notion
-    for task in all_tasks:
-        if linked_task_ids.__contains__(str(task['id'])):
-            # print(f"linked task {task['id']=}; {task['content']}")
-            continue
-        create_action_entry(task)
-
-    # 4. Save Notion page reference to Todoist tasks' description
-    todoist_api.commit()
+    try:
+        for task in all_tasks:
+            if linked_task_ids.__contains__(str(task['id'])):
+                continue
+            create_action_entry(todoist_api, task)
+    finally:
+        # 4. Save Notion page reference to Todoist tasks' description
+        todoist_api.commit()

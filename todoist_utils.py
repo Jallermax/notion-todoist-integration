@@ -1,4 +1,5 @@
 import ast
+import re
 from enum import Enum
 from functools import reduce
 
@@ -7,6 +8,9 @@ import todoist
 import notion
 from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
+
+md_link_pattern = re.compile(r"\[(.+)\]\((https?:\/\/[\w\d./?=+\-#%&]+)\)")
+page_id_from_url_pattern = re.compile(r"\[.+\]\(https?:\/\/.*([\d\w]{32})\)")
 
 
 class NoneStrategy(Enum):
@@ -65,26 +69,18 @@ def deep_get(dictionary, keys, default=None):
     return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
 
 
-def map_property(task, prop_name: str, props: dict = None, child_blocks: list = None):
+def map_property(task, prop_name: str, props: dict = None, child_blocks: list = None, convert_md_links=False):
     if isinstance(props, type(None)):
         props = {}
     if isinstance(child_blocks, type(None)):
         child_blocks = []
 
-    _p, _c = parse_prop(task, prop_name)
+    _p, _c = parse_prop(task, prop_name, convert_md_links)
     if _p:
         props.update(_p)
     if _c:
         child_blocks.append(_c)
     return props, child_blocks
-
-
-def map_project(task, props: dict = None, child_blocks: list = None):
-    return map_property(task, 'project_id', props, child_blocks)
-
-
-def map_priority(task, props: dict = None, child_blocks: list = None):
-    return map_property(task, 'priority', props, child_blocks)
 
 
 def map_labels(task, props: dict = None, child_blocks: list = None):
@@ -135,7 +131,7 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
     return props, child_blocks
 
 
-def parse_prop(task, prop_key):
+def parse_prop(task, prop_key, convert_md_links):
     if not task or not deep_get(task.data, prop_key):
         return None, None
 
@@ -173,6 +169,17 @@ def parse_prop(task, prop_key):
     if 'expression' in default_notion_values.keys():
         todoist_val = eval(default_notion_values.get('expression'), {'value': todoist_val})
 
+    # TODO add handling of multiple links in string
+    if convert_md_links and formatter['method'] == pformat.title and md_link_pattern.search(todoist_val):
+        regs = md_link_pattern.search(todoist_val).regs
+        notion_link = pformat.link(todoist_val[regs[1][0]:regs[1][1]] + '🔗', todoist_val[regs[2][0]:regs[2][1]])
+        begin_text = todoist_val[:regs[0][0]]
+        end_text = todoist_val[regs[0][1]:]
+        text_blocks = (pformat.text(begin_text) if len(begin_text) > 0 else None, notion_link,
+                       pformat.text(end_text) if len(end_text) > 0 else None)
+        title_with_link = pformat.rich_title([b for b in text_blocks if b])
+        return {default_notion_values.get('name'): title_with_link}, None
+
     if formatter['is_property']:
         if link:
             return {default_notion_values.get('name'): formatter['method'](todoist_val, link=link)}, None
@@ -182,3 +189,15 @@ def parse_prop(task, prop_key):
             return None, formatter['method'](f"{prop_key}: {todoist_val}", link=link)
         return None, formatter['method'](f"{prop_key}: {todoist_val}")
 
+
+def extract_link_to_parent(task, todoist_api: todoist.TodoistAPI = None):
+    if not todoist_api:
+        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+        todoist_api.sync()
+
+    if task['parent_id']:
+        parent_task = todoist_api.items.get_by_id(task['parent_id'])
+        parent_page_id = page_id_from_url_pattern.findall(parent_task.data.get('description'))
+        if parent_page_id:
+            return parent_page_id[0]
+    return None

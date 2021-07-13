@@ -50,7 +50,7 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
                 query = {}
             query.update({'start_cursor': res.json()['next_cursor']})
 
-    _LOG.info(f"Received {len(data)} records for {database_id=}")
+    _LOG.debug(f"Received {len(data)} records for {database_id=}")
     if log_to_file:
         with open('test/db.json', 'w', encoding='utf8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -83,7 +83,6 @@ def process_response(res, log=False):
         _LOG.error(f"Error message: {json.dumps(res.json(), ensure_ascii=False, indent=2)}")
         return False
     if log:
-        # _LOG.debug(json.dumps(res.json(), ensure_ascii=False, indent=2))
         _LOG.debug(res.json())
     return True
 
@@ -101,9 +100,24 @@ def flatten_properties(*formatted_prop):
 class PropertyFormatter:
 
     @staticmethod
+    def text(text, **kwargs):
+        text = text if isinstance(text, str) else str(text)
+        return {"text": {"content": text}}
+
+    @staticmethod
+    def link(text, link, **kwargs):
+        text = text if isinstance(text, str) else str(text)
+        link = link if isinstance(link, str) else str(link)
+        return {"text": {"content": text, "link": {"url": link}, "annotations": {"underline": True}}}
+
+    @staticmethod
     def title(value, **kwargs):
         value = value if isinstance(value, str) else str(value)
         return {"title": [{"text": {"content": value}}]}
+
+    @staticmethod
+    def rich_title(values: list, **kwargs):
+        return {"title": values}
 
     @staticmethod
     def rich_text(value, **kwargs):
@@ -123,6 +137,7 @@ class PropertyFormatter:
 
     @staticmethod
     def date(value: str, localize=True, **kwargs):
+        # TODO use from dateutil.parser import parse (or Maya) instead and eject parsing method from formatting method
         if localize:
             if len(value) == 20:
                 value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
