@@ -87,82 +87,86 @@ def process_response(res, log=False):
     return True
 
 
-def flatten_properties(*formatted_prop):
-    flattened_props = []
-    for fp in list(formatted_prop):
-        if 'rich_text' in fp.keys():
-            flattened_props.extend(fp['rich_text'])
-        else:
-            flattened_props.append(fp)
-    return flattened_props
-
-
 class PropertyFormatter:
 
+    """
+    Primitive rich-text types
+    """
     @staticmethod
-    def text(text, **kwargs):
+    def text(text):
         text = text if isinstance(text, str) else str(text)
         return {"text": {"content": text}}
 
     @staticmethod
-    def link(text, link, **kwargs):
+    def link(text, link):
         text = text if isinstance(text, str) else str(text)
         link = link if isinstance(link, str) else str(link)
-        return {"text": {"content": text, "link": {"url": link}, "annotations": {"underline": True}}}
+        return {"text": {"content": text, "link": {"url": link}}}
 
     @staticmethod
-    def title(value, **kwargs):
-        value = value if isinstance(value, str) else str(value)
-        return {"title": [{"text": {"content": value}}]}
-
-    @staticmethod
-    def rich_title(values: list, **kwargs):
-        return {"title": values}
-
-    @staticmethod
-    def rich_text(value, **kwargs):
-        value = value if isinstance(value, str) else str(value)
-        return {"rich_text": [{"text": {"content": value}}]}
-
-    @staticmethod
-    def rich_text_link(text, link, **kwargs):
-        text = text if isinstance(text, str) else str(text)
-        link = link if isinstance(link, str) else str(link)
-        return {"rich_text": [{"text": {"content": text, "link": {"url": link}}}]}
-
-    @staticmethod
-    def rich_text_page_mention(page_id, **kwargs):
+    def mention(page_id):
         page_id = page_id if isinstance(page_id, str) else str(page_id)
-        return {"rich_text": [{"mention": {"page": {"id": page_id}}}]}
+        return {"mention": {"page": {"id": page_id}}}
 
+    """
+    Primitive property object types
+    """
     @staticmethod
-    def date(value: str, localize=True, **kwargs):
+    def date(value: str, localize=True, property_obj=True):
         # TODO use from dateutil.parser import parse (or Maya) instead and eject parsing method from formatting method
         if localize:
             if len(value) == 20:
                 value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
             elif len(value) == 19:
                 value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")).isoformat()
-        return {"date": {"start": value}}
+        return {"date": {"start": value}} if property_obj else PropertyFormatter.text(value)
 
     @staticmethod
-    def relation(page_id, **kwargs):
+    def relation(page_id, property_obj=True):
+        # TODO page_id to tuple
+        # lst = [pid if isinstance(page_id, str) else str(page_id) for pid in [page_id]]
         page_id = page_id if isinstance(page_id, str) else str(page_id)
-        return {"relation": [{"id": page_id}]}
+        return {"relation": [{"id": page_id}]} if property_obj else PropertyFormatter.mention(page_id)
 
     @staticmethod
-    def checkbox(value, **kwargs):
+    def checkbox(value, property_obj=True):
         value = value if isinstance(value, bool) else bool(value)
-        return {"checkbox": value}
+        return {"checkbox": value} if property_obj else PropertyFormatter.text(value)
 
     @staticmethod
-    def select(name, **kwargs):
+    def select(name, property_obj=True):
         name = name if isinstance(name, str) else str(name)
-        return {"select": {"name": name}}
+        return {"select": {"name": name}} if property_obj else PropertyFormatter.text(name)
+
+    """
+    Final prop types
+    """
+    @staticmethod
+    def title(values: list, property_obj=True):
+        return {"title": values} if property_obj else PropertyFormatter.paragraph_block(*values)
 
     @staticmethod
-    def heading_block(text, header_num=3, **kwargs):
-        if not [1, 2, 3].__contains__(header_num):
+    def rich_text(values: list, property_obj=True):
+        return {"rich_text": values} if property_obj else PropertyFormatter.paragraph_block(*values)
+
+    @staticmethod
+    def single_title(value, property_obj=True):
+        return PropertyFormatter.title([PropertyFormatter.text(value)], property_obj)
+
+    @staticmethod
+    def single_rich_text(value, property_obj=True):
+        return PropertyFormatter.rich_text([PropertyFormatter.text(value)], property_obj)
+
+    @staticmethod
+    def single_rich_text_link(text, link, property_obj=True):
+        return PropertyFormatter.rich_text([PropertyFormatter.link(text, link)], property_obj)
+
+    """
+    Final block types
+    """
+    @staticmethod
+    def heading_block(text, header_num=3):
+        if header_num not in [1, 2, 3]:
             _LOG.warning(f"Wrong {header_num=}. Should be one of [1, 2, 3]")
             header_num = 3
         block_type = "heading_" + str(header_num)
@@ -170,30 +174,23 @@ class PropertyFormatter:
             "object": "block",
             "type": block_type,
             block_type: {
-                "text": [{"type": "text", "text": {"content": text}}]
+                "text": [PropertyFormatter.text(text)]
             }
         }
 
     @staticmethod
-    def paragraph_block(*formatted_prop, **kwargs):
+    def paragraph_block(*formatted_prop):
         return {
             "object": "block",
             "type": "paragraph",
             "paragraph": {
-                "text": flatten_properties(*formatted_prop)
+                "text": [*formatted_prop]
             }
         }
 
     @staticmethod
-    def paragraph_text_block(*text, **kwargs):
-        rich_text_list = [PropertyFormatter.rich_text_link(txt, kwargs['link']) for txt in
-                          text] if 'link' in kwargs.keys() else [PropertyFormatter.rich_text(txt) for txt in text]
-        return PropertyFormatter.paragraph_block(*rich_text_list)
-
-    @staticmethod
-    def paragraph_mention_block(*page_ids, **kwargs):
-        return PropertyFormatter.paragraph_block(
-            *[PropertyFormatter.rich_text_page_mention(page_id) for page_id in page_ids])
+    def paragraph_text_block(*text):
+        return PropertyFormatter.paragraph_block(*[PropertyFormatter.text(txt) for txt in text])
 
 
 class PropertyParser:

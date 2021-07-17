@@ -16,7 +16,7 @@ LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
 def update_task_id(page_id, task_id):
     task_link = f"https://todoist.com/showTask?id={task_id}"
-    notion.update_page(page_id, TodoistTaskId=pformat.rich_text_link(str(task_id), task_link))
+    notion.update_page(page_id, TodoistTaskId=pformat.rich_text(pformat.link(task_id, task_link)))
 
 
 def create_history_entry(action_id, task) -> (bool, object):
@@ -26,7 +26,7 @@ def create_history_entry(action_id, task) -> (bool, object):
     child_blocks = []
     if task['notes']:
         child_blocks.append(pformat.heading_block("Notes", 2))
-        child_blocks.append(pformat.paragraph_text_block(task['notes']))
+        child_blocks.append(pformat.paragraph_text_block(*task['notes']))
 
     if dt:
         dt = LOCAL_TIMEZONE.normalize(
@@ -38,21 +38,23 @@ def create_history_entry(action_id, task) -> (bool, object):
 
     return notion.create_page(secrets.HISTORY_DATABASE_ID,
                               *child_blocks,
-                              Record=pformat.title(title),
+                              Record=pformat.single_title(title),
                               Completed=pformat.date(dt.date().isoformat(), localize=False),
                               Action=pformat.relation(action_id),
-                              TodoistTaskId=pformat.rich_text_link(task_id, task_link))
+                              TodoistTaskId=pformat.rich_text(pformat.link(task_id, task_link)))
 
 
 def create_action_entry(todoist_api: todoist.TodoistAPI, task):
+    metadata = notion.read_database_metadata(secrets.MASTER_TASKS_DB_ID)['properties']
+
     # TODO iterate through all keys in mappings for particular scenario instead of manually map each property type
-    notion_task, child_blocks = todoist_utils.map_property(task, 'content', convert_md_links=True)
-    todoist_utils.map_property(task, 'due.date', notion_task, child_blocks)
-    todoist_utils.map_property(task, 'id', notion_task, child_blocks)
-    todoist_utils.map_property(task, 'checked', notion_task, child_blocks)
-    todoist_utils.map_property(task, 'notes', notion_task, child_blocks)
-    todoist_utils.map_property(task, 'project_id', notion_task, child_blocks)
-    todoist_utils.map_property(task, 'priority', notion_task, child_blocks)
+    notion_task, child_blocks = todoist_utils.map_property(task, 'content', metadata, convert_md_links=True)
+    todoist_utils.map_property(task, 'due.date', metadata, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'id', metadata, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'checked', metadata, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'notes', metadata, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'project_id', metadata, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'priority', metadata, notion_task, child_blocks)
     todoist_utils.map_labels(task, notion_task, child_blocks)
 
     parent_page_id = todoist_utils.extract_link_to_parent(task, todoist_api)
@@ -85,7 +87,7 @@ def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=No
     _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
         f" for the last {days_old} days" if days_old else ""))
     all_tasks = todoist_api.items.all(
-        lambda x: (created_tasks.__contains__(x['id']) and (get_checked or x['checked'] == 0)))
+        lambda x: (x['id'] in created_tasks and (get_checked or x['checked'] == 0)))
     return all_tasks
 
 
@@ -128,7 +130,6 @@ def gather_metadata(todoist_api: todoist.TodoistAPI = None):
 def sync_periodic_actions():
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
-    # gather_metadata(todoist_api)
 
     # 1.Get completed tasks from Todoist
     completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
@@ -213,7 +214,7 @@ def sync_created_tasks(all_tasks=False, sync_completed=False):
     # 3. Create not yet linked actions/tasks in Notion
     try:
         for task in all_tasks:
-            if linked_task_ids.__contains__(str(task['id'])):
+            if str(task['id']) in linked_task_ids:
                 continue
             create_action_entry(todoist_api, task)
     finally:

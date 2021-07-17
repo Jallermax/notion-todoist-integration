@@ -50,32 +50,34 @@ def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None):
 
 def get_notion_formatter_mapper():
     # TODO move 'is_property' to pformat object
-    return {'title': {'method': pformat.title, 'is_property': True},
-            'rich_text': {'method': pformat.rich_text, 'is_property': True},
-            'rich_text_link': {'method': pformat.rich_text_link, 'is_property': True},
+    return {'title': {'method': pformat.single_title, 'is_property': True},
+            # 'rich_text': {'method': pformat.single_rich_text, 'is_property': True},
+            # 'rich_text_link': {'method': pformat.single_rich_text_link, 'is_property': True},
+            'rich_text': {'method': pformat.single_rich_text, 'is_property': True},
             'select': {'method': pformat.select, 'is_property': True},
             'checkbox': {'method': pformat.checkbox, 'is_property': True},
             'date': {'method': pformat.date, 'is_property': True},
             'relation': {'method': pformat.relation, 'is_property': True},
-            'paragraph_text_block': {'method': pformat.paragraph_text_block, 'is_property': False},
-            'paragraph_mention_block': {'method': pformat.paragraph_mention_block, 'is_property': False}}
+            # 'paragraph_text_block': {'method': pformat.paragraph_text_block, 'is_property': False}
+            }
 
 
 def get_default_values():
-    return {'type': 'paragraph_text_block'}
+    return {'type': 'rich_text'}
 
 
 def deep_get(dictionary, keys, default=None):
     return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
 
 
-def map_property(task, prop_name: str, props: dict = None, child_blocks: list = None, convert_md_links=False):
+def map_property(task, prop_name: str, db_metadata, props: dict = None, child_blocks: list = None,
+                 convert_md_links=False):
     if isinstance(props, type(None)):
         props = {}
     if isinstance(child_blocks, type(None)):
         child_blocks = []
 
-    _p, _c = parse_prop(task, prop_name, convert_md_links)
+    _p, _c = parse_prop(task, prop_name, db_metadata, convert_md_links)
     if _p:
         props.update(_p)
     if _c:
@@ -113,8 +115,8 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
         if mappings.get('none_strategy') == NoneStrategy.IGNORE.value:
             continue
 
-        if mappings.get('none_strategy') == NoneStrategy.MAP_BY_NAME.value and label_mapper.__contains__(label):
-            child_blocks.append(pformat.paragraph_mention_block(label_mapper[label]))
+        if mappings.get('none_strategy') == NoneStrategy.MAP_BY_NAME.value and label in label_mapper:
+            child_blocks.append(pformat.paragraph_block(pformat.mention(label_mapper[label])))
             continue
 
         # Default strategy: value-as-is
@@ -124,14 +126,16 @@ def map_labels(task, props: dict = None, child_blocks: list = None):
         label_name = todoist_api.labels.get_by_id(label)['name']
         if 'link' in mappings.keys():
             link = mappings.get('link').format(label_name)
-            child_blocks.append(pformat.paragraph_block(pformat.rich_text_link(f"{label_name}", link)))
+            child_blocks.append(pformat.paragraph_block(pformat.link(f"{label_name}", link)))
         else:
-            child_blocks.append(pformat.paragraph_block(pformat.rich_text(f"Todoist label: {str(label_name)}")))
+            child_blocks.append(pformat.paragraph_block(pformat.text(f"Todoist label: {str(label_name)}")))
 
     return props, child_blocks
 
 
-def parse_prop(task, prop_key, convert_md_links):
+def parse_prop(task, prop_key, db_metadata, convert_md_links):
+    # [ {"formatter": formatter_x, "props": [{"prop_key1": "Todoist Tags", values: ['214412412', '2414']}, ]}, ]
+    # { "title": {"Todoist Tags": ['214412412', '2414']}
     if not task or not deep_get(task.data, prop_key):
         return None, None
 
@@ -140,18 +144,21 @@ def parse_prop(task, prop_key, convert_md_links):
     mappings = load_todoist_to_notion_mapper()[prop_key]
     notion_prop = mappings.get('values', {}).get(str(todoist_val))
     default_notion_values = mappings.get('default_values', get_default_values())
+    default_name = default_notion_values.get('name')
+    default_type = default_notion_values.get('type')
 
     # Parse mapped property value according to mapping file
     if notion_prop:
-        n_name = notion_prop.get('name', default_notion_values.get('name'))
-        n_type = notion_prop.get('type', default_notion_values.get('type'))
-        formatter = get_notion_formatter_mapper().get(n_type)
+        n_name = notion_prop.get('name', default_name)
+        n_type = notion_prop.get('type', default_type)
         n_value = notion_prop.get('value')
+        formatter = get_notion_formatter_mapper().get(n_type)
+        is_property = n_name and n_name in db_metadata.keys()
 
-        if n_value and formatter['is_property']:
-            return {n_name: formatter['method'](n_value)}, None
-        elif n_value and not formatter['is_property']:
-            return None, formatter['method'](f"{n_name}: {n_value}")
+        if n_value and is_property:
+            return {n_name: formatter['method'](n_value, property_obj=True)}, None
+        elif n_value:
+            return None, pformat.paragraph_block(formatter['method'](f"{n_value}", property_obj=False))
 
     # If property value is not mapped, ignore it
     # TODO strategy handling of mappings['none_strategy']
@@ -160,34 +167,46 @@ def parse_prop(task, prop_key, convert_md_links):
 
     # If property value is not mapped, parse it according to default_values rules
     # if mappings.get('none_strategy') == NoneStrategy.VALUE_AS_IS.value:
-    formatter = get_notion_formatter_mapper().get(default_notion_values.get('type'))
+    is_property = default_name and default_name in db_metadata.keys()
+    formatter = get_notion_formatter_mapper().get(db_metadata[default_name]['type'] if is_property else default_type)
+
+    if convert_md_links and formatter['method'] in [pformat.single_title,
+                                                    pformat.single_rich_text] and md_link_pattern.search(todoist_val):
+        rich_text_objects = parse_md_string_to_rich_text_objects(todoist_val)
+        if is_property and formatter['method'] == pformat.single_title:
+            return {default_name: pformat.title(rich_text_objects)}, None
+        elif is_property and formatter['method'] == pformat.single_rich_text:
+            return {default_name: pformat.rich_text(rich_text_objects)}, None
+        else:
+            return None, pformat.paragraph_block(pformat.text(f"{prop_key}: "), *rich_text_objects)
 
     link = None
     if 'link' in mappings.keys():
         link = mappings.get('link').format(todoist_val)
+        link = pformat.link(todoist_val, link)
 
     if 'expression' in default_notion_values.keys():
         todoist_val = eval(default_notion_values.get('expression'), {'value': todoist_val})
 
-    # TODO add handling of multiple links in string
-    if convert_md_links and formatter['method'] == pformat.title and md_link_pattern.search(todoist_val):
-        regs = md_link_pattern.search(todoist_val).regs
-        notion_link = pformat.link(todoist_val[regs[1][0]:regs[1][1]] + '🔗', todoist_val[regs[2][0]:regs[2][1]])
-        begin_text = todoist_val[:regs[0][0]]
-        end_text = todoist_val[regs[0][1]:]
-        text_blocks = (pformat.text(begin_text) if len(begin_text) > 0 else None, notion_link,
-                       pformat.text(end_text) if len(end_text) > 0 else None)
-        title_with_link = pformat.rich_title([b for b in text_blocks if b])
-        return {default_notion_values.get('name'): title_with_link}, None
+    if is_property:
+        if link and formatter['method'] == pformat.single_title:
+            return {default_name: pformat.title([link])}, None
+        if link and formatter['method'] == pformat.single_rich_text:
+            return {default_name: pformat.rich_text([link])}, None
+        return {default_name: formatter['method'](todoist_val)}, None
+    else:
+        return None, pformat.paragraph_block(pformat.text(f"{prop_key}: "), link if link else pformat.text(todoist_val))
 
-    if formatter['is_property']:
-        if link:
-            return {default_notion_values.get('name'): formatter['method'](todoist_val, link=link)}, None
-        return {default_notion_values.get('name'): formatter['method'](todoist_val)}, None
-    elif not formatter['is_property']:
-        if link:
-            return None, formatter['method'](f"{prop_key}: {todoist_val}", link=link)
-        return None, formatter['method'](f"{prop_key}: {todoist_val}")
+
+def parse_md_string_to_rich_text_objects(todoist_val) -> list:
+    # TODO add handling of multiple links in string
+    regs = md_link_pattern.search(todoist_val).regs
+    notion_link = pformat.link(todoist_val[regs[1][0]:regs[1][1]] + '🔗', todoist_val[regs[2][0]:regs[2][1]])
+    begin_text = todoist_val[:regs[0][0]]
+    end_text = todoist_val[regs[0][1]:]
+    text_blocks = (pformat.text(begin_text) if len(begin_text) > 0 else None, notion_link,
+                   pformat.text(end_text) if len(end_text) > 0 else None)
+    return [b for b in text_blocks if b]
 
 
 def extract_link_to_parent(task, todoist_api: todoist.TodoistAPI = None):

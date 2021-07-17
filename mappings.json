@@ -89,7 +89,8 @@
   "notes": {
     "none_strategy": "value-as-is",
     "default_values": {
-      "type": "paragraph_text_block"
+      "name": "Notes",
+      "type": "rich_text"
     }
   },
   "id": {
