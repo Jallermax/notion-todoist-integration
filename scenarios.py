@@ -55,7 +55,7 @@ def create_action_entry(todoist_api: todoist.TodoistAPI, task):
     todoist_utils.map_property(task, 'notes', metadata, notion_task, child_blocks)
     todoist_utils.map_property(task, 'project_id', metadata, notion_task, child_blocks)
     todoist_utils.map_property(task, 'priority', metadata, notion_task, child_blocks)
-    todoist_utils.map_labels(task, notion_task, child_blocks)
+    todoist_utils.map_property(task, 'labels', metadata, notion_task, child_blocks)
 
     parent_page_id = todoist_utils.extract_link_to_parent(task, todoist_api)
     if parent_page_id:

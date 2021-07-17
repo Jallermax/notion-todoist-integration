@@ -8,22 +8,20 @@
     }
   },
   "labels": {
-    "none_strategy": "map-by-name",
+    "none_strategy": "ignore",
     "link": "https://todoist.com/app/label/{}",
     "default_values": {
       "name": "Todoist Tags",
-      "type": "paragraph_mention_block"
+      "type": "relation"
     },
     "values": {
       "2157061836": {
         "name": "Projects",
-        "type": "relation",
         "value": "3142b10bfeac4b669a24d4603efb2f3a",
         "comment": "ML career path"
       },
       "2149478237": {
         "name": "Outcomes",
-        "type": "relation",
         "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
         "comment": "finances"
       },
@@ -90,7 +88,8 @@
     "none_strategy": "value-as-is",
     "default_values": {
       "name": "Notes",
-      "type": "rich_text"
+      "type": "rich_text",
+      "expression": "'* ' + value + '\\n'"
     }
   },
   "id": {
@@ -98,7 +97,7 @@
     "link": "https://todoist.com/showTask?id={}",
     "default_values": {
       "name": "TodoistTaskId",
-      "type": "rich_text_link"
+      "type": "rich_text"
     }
   },
   "content": {
