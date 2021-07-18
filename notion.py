@@ -65,7 +65,6 @@ def create_page(parent_id, *args, **kwargs):
     if args:
         params.update({"children": args})
     res = requests.post(url, headers=headers, json=params)
-    process_response(res)
     return process_response(res), res.json()
 
 
@@ -74,7 +73,7 @@ def update_page(page_id, **kwargs):
 
     properties = {"properties": kwargs}
     res = requests.patch(url, headers=headers, json=properties)
-    process_response(res)
+    return process_response(res), res.json()
 
 
 def process_response(res, log=False):

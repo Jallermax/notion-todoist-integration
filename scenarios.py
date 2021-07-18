@@ -80,7 +80,6 @@ def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=No
 
     # TODO loop through activities with offset if > limit
     events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
-    # TODO limit days_old to last successful sync saved in session
     created_tasks = list(x['object_id'] for x in events if
                          not days_old or datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
                                  datetime.datetime.now() - datetime.timedelta(days=days_old)))
@@ -220,3 +219,24 @@ def sync_created_tasks(all_tasks=False, sync_completed=False):
     finally:
         # 4. Save Notion page reference to Todoist tasks' description
         todoist_api.commit()
+
+
+def sync_deleted_tasks():
+    todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+    todoist_api.sync()
+    events = todoist_api.activity.get(object_type='item', event_type='deleted', limit=100)['events']
+    deleted_tasks_id = [str(x['object_id']) for x in events]
+
+    by_deleted_id_filter = [{"property": "TodoistTaskId", "text": {"equals": del_id}} for del_id in deleted_tasks_id]
+    query = {"filter": {"and": [{"property": "ToDelete", "checkbox": {"equals": False}},
+                                {"or": by_deleted_id_filter}]}}
+    tasks_to_delete = notion.read_database(secrets.MASTER_TASKS_DB_ID, query)
+
+    for task in tasks_to_delete:
+        success, page = notion.update_page(task['id'],
+                                           TodoistTaskId=pformat.rich_text([pformat.text("")]),
+                                           ToDelete=pformat.checkbox(True))
+        if success:
+            _LOG.info(f"Notion task '{pparser.title(task, 'Name')}' was marked ToDelete: {page['url']}")
+        else:
+            _LOG.error(f"Error marking Notion task '{pparser.title(task, 'Name')}' ToDelete: {task['url']=}")
