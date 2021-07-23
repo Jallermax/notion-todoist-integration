@@ -126,14 +126,14 @@ def gather_metadata(todoist_api: todoist.TodoistAPI = None):
           f"properties: {p_dict}")
 
 
-def sync_periodic_actions():
+def sync_periodic_actions(todoist_id_text_prop='TodoistTaskId', on_hold_bool_prop="OnHold"):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
 
     # 1.Get completed tasks from Todoist
     completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
     by_task_id_filter = list(
-        {"property": "TodoistTaskId", "text": {"equals": str(task['task_id'])}} for task in completed_tasks)
+        {"property": todoist_id_text_prop, "text": {"equals": str(task['task_id'])}} for task in completed_tasks)
 
     # 2.Create history records in Notion for each completed task
     query = {"filter": {"or": by_task_id_filter}}
@@ -142,7 +142,7 @@ def sync_periodic_actions():
     history_records_ids = []
     for action in completed_actions:
         completed_task = list(filter(
-            lambda ct: str(ct['task_id']) == pparser.rich_text(action, 'TodoistTaskId'), completed_tasks))[0]
+            lambda ct: str(ct['task_id']) == pparser.rich_text(action, todoist_id_text_prop), completed_tasks))[0]
         detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
         append_notes_to_tasks([detailed_task], todoist_api)
         success, page = create_history_entry(action['id'], detailed_task)
@@ -150,8 +150,8 @@ def sync_periodic_actions():
             history_records_ids.append(page['id'])
 
     # 3.Gather notion maintenance actions [without TodoistTaskId and not OnHold] or [completed from previous step]
-    empty_task_id_filter = {"property": "TodoistTaskId", "text": {"is_empty": True}}
-    not_on_hold_filter = {"property": "OnHold", "checkbox": {"equals": False}}
+    empty_task_id_filter = {"property": todoist_id_text_prop, "text": {"is_empty": True}}
+    not_on_hold_filter = {"property": on_hold_bool_prop, "checkbox": {"equals": False}}
     completed_actions_filter = list(
         {"property": "History records", "relation": {"contains": page_id}} for page_id in history_records_ids)
     no_tasks_query = {
@@ -161,7 +161,7 @@ def sync_periodic_actions():
     # 4.Create task in Todoist for each maintenance action without active link to by task_id
     dummy_task = {'id': '', 'user_id': ''}
     for action in actions_to_update:
-        if pparser.generic_prop(action, 'OnHold'):
+        if pparser.generic_prop(action, on_hold_bool_prop):
             action.update({"created_task": dummy_task})
             continue
         labels = []
@@ -194,7 +194,7 @@ def sync_periodic_actions():
             update_task_id(atu['id'], atu['created_task']['id'])
 
 
-def sync_created_tasks(all_tasks=False, sync_completed=False):
+def sync_created_tasks(all_tasks=False, sync_completed=False, todoist_id_text_prop='TodoistTaskId'):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
 
@@ -206,9 +206,9 @@ def sync_created_tasks(all_tasks=False, sync_completed=False):
     append_notes_to_tasks(all_tasks, todoist_api)
 
     # 2. Get already created linked actions not to create dupes
-    linked_actions_query = {"filter": {"property": "TodoistTaskId", "text": {"is_not_empty": True}}}
+    linked_actions_query = {"filter": {"property": todoist_id_text_prop, "text": {"is_not_empty": True}}}
     linked_actions = notion.read_database(secrets.MASTER_TASKS_DB_ID, linked_actions_query)
-    linked_task_ids = list(pparser.rich_text(action, 'TodoistTaskId') for action in linked_actions)
+    linked_task_ids = list(pparser.rich_text(action, todoist_id_text_prop) for action in linked_actions)
 
     # 3. Create not yet linked actions/tasks in Notion
     try:

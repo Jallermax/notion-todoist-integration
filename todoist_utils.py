@@ -30,7 +30,7 @@ def load_todoist_to_notion_mapper():
     return dictionary
 
 
-def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None):
+def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None, todoist_tags_text_prop='Todoist Tags'):
     """
     Creates an id mapping between 'Todoist Tags' property in Notion Master Tag DB and Todoist Labels by name.
     :return: dict(todoist_label_id: notion_tag_page_id)
@@ -41,8 +41,8 @@ def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None):
 
     labels = {label['name']: label['id'] for label in todoist_api.labels.all()}
     notion_master_tags = n_tags if n_tags else notion.read_database(secrets.MASTER_TAG_DB)
-    notion_tags = {pparser.rich_text(page, 'Todoist Tags'): page['id'] for page in notion_master_tags if
-                   pparser.rich_text(page, 'Todoist Tags')}
+    notion_tags = {pparser.rich_text(page, todoist_tags_text_prop): page['id'] for page in notion_master_tags if
+                   pparser.rich_text(page, todoist_tags_text_prop)}
     tag_mapping = {labels[key]: notion_tags[key] for key in notion_tags}
 
     return tag_mapping

@@ -9,9 +9,9 @@ logging.getLogger('urllib3').setLevel(logging.INFO)
 if __name__ == '__main__':
     print('Started scenarios...')
     # gather_metadata(todoist_api)
-    sync_created_tasks(True, True)  # One time migration of all tasks to Notion
+    sync_created_tasks(all_tasks=True, sync_completed=True)  # One time migration of all tasks to Notion
     while True:
         sync_deleted_tasks()
-        sync_created_tasks()
+        sync_created_tasks(sync_completed=True)
         sync_periodic_actions()
         time.sleep(60)

@@ -4,6 +4,7 @@ import logging
 import pytz
 import requests
 import secrets
+from functools import reduce
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
@@ -195,20 +196,22 @@ class PropertyFormatter:
 class PropertyParser:
 
     @staticmethod
-    def generic_prop(action, name):
-        return action['properties'][name][action['properties'][name]['type']]
+    def generic_prop(page: dict, name: str, p_type=None):
+        if not p_type:
+            p_type = page['properties'][name]['type']
+        return page['properties'][name][p_type]
 
     @staticmethod
     def rich_text(page: dict, name: str):
-        prop = page['properties'][name]['rich_text']
-        return None if len(prop) == 0 else prop[0]['plain_text']
+        prop = PropertyParser.generic_prop(page, name, 'rich_text')
+        return reduce(lambda x, y: x + y['plain_text'], prop, '')
 
     @staticmethod
     def title(page: dict, name: str):
-        prop = page['properties'][name]['title']
-        return None if len(prop) == 0 else prop[0]['plain_text']
+        prop = PropertyParser.generic_prop(page, name, 'title')
+        return reduce(lambda x, y: x + y['plain_text'], prop, '')
 
     @staticmethod
     def formula_start_date(page: dict, name: str):
         prop = page['properties'][name]['formula']
-        return None if len(prop) == 0 else prop['date']['start']
+        return prop['date']['start'] if prop else None
