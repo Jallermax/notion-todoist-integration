@@ -1,4 +1,5 @@
 import ast
+import logging
 import re
 from enum import Enum
 from functools import reduce
@@ -9,6 +10,7 @@ import notion
 from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
 
+_LOG = logging.getLogger(__name__)
 md_link_pattern = re.compile(r"\[(.+)\]\((https?:\/\/[\w\d./?=+\-#%&]+)\)")
 page_id_from_url_pattern = re.compile(r"\[.+\]\(https?:\/\/.*([\d\w]{32})\)")
 
@@ -257,3 +259,31 @@ def extract_link_to_parent(task, todoist_api: todoist.TodoistAPI = None):
         if parent_page_id:
             return parent_page_id[0]
     return None
+
+
+def get_events(todoist_api: todoist.TodoistAPI = None, limit=1000000, batch_size=100, **kwargs):
+    """
+    For todoist_api doc possible kwargs see https://developer.todoist.com/sync/v8/?shell#get-activity-logs
+    :param todoist_api: TODO move to context
+    :param limit: limit of all collected events available from Todoist.
+    :param batch_size: batch size for activities in one request.
+    :return: event object (see https://developer.todoist.com/sync/v8/?shell#activity).
+    """
+    if not todoist_api:
+        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+        todoist_api.sync()
+
+    if 0 > batch_size > 100:
+        _LOG.warning(f"{batch_size=}, but value must be between 0 and 100. Setting value to 100")
+        batch_size = 100
+
+    events = []
+    count = batch_size
+    offset = 0
+    while len(events) < count:
+        result = todoist_api.activity.get(**kwargs, limit=batch_size, offset=offset)
+        events.extend(result['events'])
+        if offset == 0:
+            count = min(result['count'], limit)
+        offset += batch_size
+    return events

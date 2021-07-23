@@ -78,8 +78,7 @@ def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=No
         todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
         todoist_api.sync()
 
-    # TODO loop through activities with offset if > limit
-    events = todoist_api.activity.get(object_type='item', event_type='added', limit=100)['events']
+    events = todoist_utils.get_events(object_type='item', event_type='added')
     created_tasks = list(x['object_id'] for x in events if
                          not days_old or datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ") > (
                                  datetime.datetime.now() - datetime.timedelta(days=days_old)))
@@ -243,7 +242,7 @@ def sync_updated_tasks():
 def get_notion_tasks_to_delete(deletion_checkbox_prop, todoist_id_text_prop):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
-    events = todoist_api.activity.get(object_type='item', event_type='deleted', limit=100)['events']
+    events = todoist_utils.get_events(object_type='item', event_type='deleted')
     deleted_tasks_id = [str(x['object_id']) for x in events]
     by_deleted_id_filter = [{"property": todoist_id_text_prop, "text": {"equals": del_id}} for del_id in
                             deleted_tasks_id]
