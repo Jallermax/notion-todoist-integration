@@ -106,6 +106,11 @@ class PropertyFormatter:
         return {"text": {"content": text, "link": {"url": link}}}
 
     @staticmethod
+    def id(page_id):
+        page_id = page_id if isinstance(page_id, str) else str(page_id)
+        return {"id": page_id}
+
+    @staticmethod
     def mention(page_id):
         page_id = page_id if isinstance(page_id, str) else str(page_id)
         return {"mention": {"page": PropertyFormatter.id(page_id)}}
@@ -117,6 +122,8 @@ class PropertyFormatter:
     @staticmethod
     def date(value: str, localize=True, property_obj=True):
         # TODO use from dateutil.parser import parse (or Maya) instead and eject parsing method from formatting method
+        if not value:
+            return {"date": None} if property_obj else PropertyFormatter.text('')
         if localize:
             if len(value) == 20:
                 value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
@@ -125,11 +132,14 @@ class PropertyFormatter:
         return {"date": {"start": value}} if property_obj else PropertyFormatter.text(value)
 
     @staticmethod
-    def relation(page_id, property_obj=True):
-        # TODO page_id to tuple
-        # lst = [pid if isinstance(page_id, str) else str(page_id) for pid in [page_id]]
+    def single_relation(page_id, property_obj=True):
         page_id = page_id if isinstance(page_id, str) else str(page_id)
-        return {"relation": [{"id": page_id}]} if property_obj else PropertyFormatter.mention(page_id)
+        return PropertyFormatter.relation([page_id], property_obj)
+
+    @staticmethod
+    def relation(formatted_props: list, property_obj=True):
+        return {"relation": formatted_props} if property_obj else PropertyFormatter.paragraph_block(
+            *[PropertyFormatter.mention(fp) for fp in formatted_props])
 
     @staticmethod
     def checkbox(value, property_obj=True):
@@ -146,12 +156,12 @@ class PropertyFormatter:
     """
 
     @staticmethod
-    def title(values: list, property_obj=True):
-        return {"title": values} if property_obj else PropertyFormatter.paragraph_block(*values)
+    def title(formatted_props: list, property_obj=True):
+        return {"title": formatted_props} if property_obj else PropertyFormatter.paragraph_block(*formatted_props)
 
     @staticmethod
-    def rich_text(values: list, property_obj=True):
-        return {"rich_text": values} if property_obj else PropertyFormatter.paragraph_block(*values)
+    def rich_text(formatted_props: list, property_obj=True):
+        return {"rich_text": formatted_props} if property_obj else PropertyFormatter.paragraph_block(*formatted_props)
 
     @staticmethod
     def single_title(value, property_obj=True):
@@ -202,6 +212,8 @@ class PropertyParser:
 
     @staticmethod
     def generic_prop(page: dict, name: str, p_type=None):
+        if not page['properties'].get(name):
+            return None
         if not p_type:
             p_type = page['properties'][name]['type']
         return page['properties'][name][p_type]
@@ -209,12 +221,33 @@ class PropertyParser:
     @staticmethod
     def rich_text(page: dict, name: str):
         prop = PropertyParser.generic_prop(page, name, 'rich_text')
-        return reduce(lambda x, y: x + y['plain_text'], prop, '')
+        return reduce(lambda x, y: x + y['plain_text'], prop, '') if prop else None
 
     @staticmethod
     def title(page: dict, name: str):
         prop = PropertyParser.generic_prop(page, name, 'title')
-        return reduce(lambda x, y: x + y['plain_text'], prop, '')
+        return reduce(lambda x, y: f"{x}{y['plain_text']}" if not y['href'] else f"{x}[{y['plain_text']}]({y['href']})",
+                      prop, '') if prop else None
+
+    @staticmethod
+    def select(page: dict, name: str):
+        prop = PropertyParser.generic_prop(page, name, 'select')
+        return prop['name'] if prop else None
+
+    @staticmethod
+    def checkbox(page: dict, name: str):
+        prop = PropertyParser.generic_prop(page, name, 'checkbox')
+        return str(prop) if isinstance(prop, bool) else None
+
+    @staticmethod
+    def relation(page: dict, name: str):
+        prop = PropertyParser.generic_prop(page, name, 'relation')
+        return ','.join([r['id'] for r in prop]) if prop else None
+
+    @staticmethod
+    def date_wo_tz(page: dict, name: str):
+        prop = PropertyParser.generic_prop(page, name, 'date')
+        return prop['start'][:19] if prop else None
 
     @staticmethod
     def formula_start_date(page: dict, name: str):

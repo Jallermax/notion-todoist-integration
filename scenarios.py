@@ -16,7 +16,9 @@ LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
 def update_task_id(page_id, task_id):
     task_link = f"https://todoist.com/showTask?id={task_id}"
-    notion.update_page(page_id, TodoistTaskId=pformat.rich_text(pformat.link(task_id, task_link)))
+    success, page = notion.update_page(page_id, TodoistTaskId=pformat.rich_text([pformat.link(task_id, task_link)]))
+    if not success:
+        _LOG.error(f"Error adding TodoistTaskId={task_id} to notion task '{page['url']}'")
 
 
 def create_history_entry(action_id, task) -> (bool, object):
@@ -33,15 +35,15 @@ def create_history_entry(action_id, task) -> (bool, object):
             pytz.timezone("UTC").localize(datetime.datetime.strptime(dt, "%Y-%m-%dT%H:%M:%SZ")))
     else:
         dt = LOCAL_TIMEZONE.localize(datetime.datetime.now())
-    title = dt.strftime('%y.%m.%d') + ('' if desc == '' else ' ' + desc)
+    title = dt.strftime('%y.%m.%d')
     task_link = f"https://todoist.com/showTask?id={task_id}"
 
     return notion.create_page(secrets.HISTORY_DATABASE_ID,
                               *child_blocks,
                               Record=pformat.single_title(title),
                               Completed=pformat.date(dt.date().isoformat(), localize=False),
-                              Action=pformat.relation(action_id),
-                              TodoistTaskId=pformat.rich_text(pformat.link(task_id, task_link)))
+                              Action=pformat.single_relation(action_id),
+                              TodoistTaskId=pformat.rich_text([pformat.link(task_id, task_link)]))
 
 
 def create_action_entry(todoist_api: todoist.TodoistAPI, task):
@@ -59,7 +61,7 @@ def create_action_entry(todoist_api: todoist.TodoistAPI, task):
 
     parent_page_id = todoist_utils.extract_link_to_parent(task, todoist_api)
     if parent_page_id:
-        notion_task.update({"Waiting_for": pformat.relation(parent_page_id)})
+        notion_task.update({"Waiting_for": pformat.single_relation(parent_page_id)})
     synced_time = datetime.datetime.now(LOCAL_TIMEZONE).isoformat()
     notion_task.update({"Synced": pformat.date(synced_time)})
 
@@ -147,6 +149,9 @@ def sync_periodic_actions(todoist_id_text_prop='TodoistTaskId', on_hold_bool_pro
         success, page = create_history_entry(action['id'], detailed_task)
         if success:
             history_records_ids.append(page['id'])
+            _LOG.info(f"History record created: {page['url']}")
+        else:
+            _LOG.error(f"Error creating history record from {detailed_task=}")
 
     # 3.Gather notion maintenance actions [without TodoistTaskId and not OnHold] or [completed from previous step]
     empty_task_id_filter = {"property": todoist_id_text_prop, "text": {"is_empty": True}}
@@ -235,10 +240,70 @@ def sync_deleted_tasks(todoist_id_text_prop='TodoistTaskId',
             _LOG.error(f"Error marking Notion task '{pparser.title(task, 'Name')}' ToDelete: {task['url']=}")
 
 
-def sync_updated_tasks():
-    # get relevant prop updates mappings
-    pass
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
+
+def sync_updated_tasks(sync_created=True, sync_completed=True,
+                       todoist_id_text_prop='TodoistTaskId',
+                       last_synced_date_prop='Synced'):
+    # get relevant prop updates mappings
+    updated_tasks, updated_events = get_updated_tasks(sync_created, sync_completed)
+    append_notes_to_tasks(updated_tasks)
+
+    entries_to_update = []
+    for upd_tasks_chunk in chunks(updated_tasks, 100):
+        by_task_id_and_after_sync_filter = [
+            {"and": [{"property": todoist_id_text_prop, "text": {"equals": str(upd_id['id'])}},
+                     {"property": last_synced_date_prop,
+                      "date": {"before": updated_events[upd_id['id']]}}]} for upd_id in upd_tasks_chunk]
+        query = {"filter": {"or": by_task_id_and_after_sync_filter}}
+        entries_to_update.extend(notion.read_database(secrets.MASTER_TASKS_DB_ID, query))
+
+    metadata = notion.read_database_metadata(secrets.MASTER_TASKS_DB_ID)['properties']
+    for entry in entries_to_update:
+        todoist_task = next(
+            filter(lambda x: str(x['id']) == pparser.rich_text(entry, todoist_id_text_prop), updated_tasks))
+        props_to_check_for_upd = ['content', 'due.date', 'checked', 'priority']
+        props_to_upd = todoist_utils.update_properties(entry, todoist_task, props_to_check_for_upd, metadata)
+
+        if props_to_upd:
+            props_to_upd[last_synced_date_prop] = pformat.date(datetime.datetime.now(LOCAL_TIMEZONE).isoformat())
+            success, page = notion.update_page(entry['id'], **props_to_upd)
+            if success:
+                _LOG.info(f"Notion task '{pparser.title(entry, 'Name')}' was updated: {page['url']}")
+            else:
+                _LOG.error(
+                    f"Error updating Notion task '{pparser.title(entry, 'Name')}', {props_to_upd=}: {entry['url']=}")
+
+
+def get_updated_tasks(sync_created=True, sync_completed=True):
+    todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
+    todoist_api.sync()
+    events = todoist_utils.get_events(object_type='item', event_type='updated')
+    if sync_completed:
+        events.extend(todoist_utils.get_events(object_type='item', event_type='completed'))
+        # sort to have latest event_date after reducing to unique dict entry
+        events.sort(key=lambda k: k['event_date'])
+    updated_tasks_id = {x['object_id']: LOCAL_TIMEZONE.normalize(
+        pytz.timezone("UTC").localize(datetime.datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ"))).isoformat()
+                        for x in events}
+
+    tasks_to_exclude = []
+    if not sync_created:
+        events = todoist_utils.get_events(object_type='item', event_type='created')
+        tasks_to_exclude.extend([x['object_id'] for x in events])
+    tasks_to_exclude = list(set(tasks_to_exclude))
+    for task_id in tasks_to_exclude:
+        if not tasks_to_exclude or task_id in updated_tasks_id.keys():
+            updated_tasks_id.pop(task_id)
+
+    updated_tasks = todoist_api.items.all(
+        lambda x: x['id'] in updated_tasks_id.keys() and (sync_completed or x['checked'] == 0))
+    _LOG.debug(f"Received {len(updated_tasks)} updated tasks")
+    return updated_tasks, updated_tasks_id
 
 
 def get_notion_tasks_to_delete(todoist_id_text_prop):

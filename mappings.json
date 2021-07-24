@@ -111,7 +111,8 @@
     "none_strategy": "value-as-is",
     "default_values": {
       "name": "Done",
-      "type": "checkbox"
+      "type": "checkbox",
+      "expression": "bool(value)"
     }
   },
   "due.date": {
