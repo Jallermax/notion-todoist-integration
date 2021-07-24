@@ -220,14 +220,15 @@ def sync_created_tasks(all_tasks=False, sync_completed=False, todoist_id_text_pr
         todoist_api.commit()
 
 
-def sync_deleted_tasks(todoist_id_text_prop='TodoistTaskId', deletion_checkbox_prop='ToDelete'):
-    tasks_to_delete = get_notion_tasks_to_delete(deletion_checkbox_prop, todoist_id_text_prop)
+def sync_deleted_tasks(todoist_id_text_prop='TodoistTaskId',
+                       last_synced_date_prop='Synced'):
+    notion_tasks_to_delete = get_notion_tasks_to_delete(todoist_id_text_prop)
 
-    update_to_delete = {todoist_id_text_prop: pformat.rich_text([pformat.text("")]),
-                        deletion_checkbox_prop: pformat.checkbox(True)}
+    synced_time = datetime.datetime.now(LOCAL_TIMEZONE).isoformat()
+    update_to_delete = {last_synced_date_prop: pformat.date(synced_time)}
 
-    for task in tasks_to_delete:
-        success, page = notion.update_page(task['id'], **update_to_delete)
+    for task in notion_tasks_to_delete:
+        success, page = notion.update_page(task['id'], archive=True, **update_to_delete)
         if success:
             _LOG.info(f"Notion task '{pparser.title(task, 'Name')}' was marked ToDelete: {page['url']}")
         else:
@@ -239,14 +240,14 @@ def sync_updated_tasks():
     pass
 
 
-def get_notion_tasks_to_delete(deletion_checkbox_prop, todoist_id_text_prop):
+
+def get_notion_tasks_to_delete(todoist_id_text_prop):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
     events = todoist_utils.get_events(object_type='item', event_type='deleted')
     deleted_tasks_id = [str(x['object_id']) for x in events]
     by_deleted_id_filter = [{"property": todoist_id_text_prop, "text": {"equals": del_id}} for del_id in
                             deleted_tasks_id]
-    query = {"filter": {"and": [{"property": deletion_checkbox_prop, "checkbox": {"equals": False}},
-                                {"or": by_deleted_id_filter}]}}
-    tasks_to_delete = notion.read_database(secrets.MASTER_TASKS_DB_ID, query)
-    return tasks_to_delete
+    query = {"filter": {"or": by_deleted_id_filter}}
+    entries_to_delete = notion.read_database(secrets.MASTER_TASKS_DB_ID, query)
+    return entries_to_delete

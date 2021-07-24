@@ -69,10 +69,12 @@ def create_page(parent_id, *args, **kwargs):
     return process_response(res), res.json()
 
 
-def update_page(page_id, **kwargs):
+def update_page(page_id, archive=False, **kwargs):
     url = f"https://api.notion.com/v1/pages/{page_id}"
 
     properties = {"properties": kwargs}
+    if archive:
+        properties['archived'] = True
     res = requests.patch(url, headers=headers, json=properties)
     return process_response(res), res.json()
 
@@ -88,10 +90,10 @@ def process_response(res, log=False):
 
 
 class PropertyFormatter:
-
     """
     Primitive rich-text types
     """
+
     @staticmethod
     def text(text):
         text = text if isinstance(text, str) else str(text)
@@ -106,11 +108,12 @@ class PropertyFormatter:
     @staticmethod
     def mention(page_id):
         page_id = page_id if isinstance(page_id, str) else str(page_id)
-        return {"mention": {"page": {"id": page_id}}}
+        return {"mention": {"page": PropertyFormatter.id(page_id)}}
 
     """
     Primitive property object types
     """
+
     @staticmethod
     def date(value: str, localize=True, property_obj=True):
         # TODO use from dateutil.parser import parse (or Maya) instead and eject parsing method from formatting method
@@ -141,6 +144,7 @@ class PropertyFormatter:
     """
     Final prop types
     """
+
     @staticmethod
     def title(values: list, property_obj=True):
         return {"title": values} if property_obj else PropertyFormatter.paragraph_block(*values)
@@ -164,6 +168,7 @@ class PropertyFormatter:
     """
     Final block types
     """
+
     @staticmethod
     def heading_block(text, header_num=3):
         if header_num not in [1, 2, 3]:
