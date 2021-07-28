@@ -155,6 +155,12 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
             if formatter['method'] == pformat.single_title:
                 current_prop_values.append(pformat.text(mapped_value))
                 continue
+            elif formatter['method'] == pformat.single_rich_text:
+                current_prop_values.append(pformat.text(mapped_value))
+                continue
+            elif formatter['method'] == pformat.single_relation:
+                current_prop_values.append(pformat.id(mapped_value))
+                continue
             current_prop_values.append(formatter['method'](mapped_value, property_obj=is_property))
             continue
 
@@ -258,6 +264,7 @@ def update_properties(notion_task, todoist_task, props_to_update, db_metadata):
     props_to_upd = {}
     for prop_key in props_to_update:
         mappings = mapper[prop_key]
+        # TODO handle list properties
         todoist_val = deep_get(todoist_task.data, prop_key)
         default_notion_values = mappings.get('default_values', {})
         mapped_prop = mappings.get('values', {}).get(str(todoist_val), {})

@@ -134,7 +134,7 @@ class PropertyFormatter:
     @staticmethod
     def single_relation(page_id, property_obj=True):
         page_id = page_id if isinstance(page_id, str) else str(page_id)
-        return PropertyFormatter.relation([page_id], property_obj)
+        return PropertyFormatter.relation([PropertyFormatter.id(page_id)], property_obj)
 
     @staticmethod
     def relation(formatted_props: list, property_obj=True):

@@ -24,7 +24,6 @@ def update_task_id(page_id, task_id):
 def create_history_entry(action_id, task) -> (bool, object):
     task_id = str(task['id'])
     dt = task['date_completed']
-    desc = task['description']
     child_blocks = []
     if task['notes']:
         child_blocks.append(pformat.heading_block("Notes", 2))
@@ -68,11 +67,10 @@ def create_action_entry(todoist_api: todoist.TodoistAPI, task):
     success, page = notion.create_page(secrets.MASTER_TASKS_DB_ID, *child_blocks, **notion_task)
     if success:
         _LOG.info(f"Page created: {page['url']}")
+        notion_reference = f"[Notion]({page['url']})"
+        task.update(description=notion_reference)
     else:
         _LOG.error(f"Error creating page from {task=}\n\t{notion_task=}\n\t{child_blocks=}\n\t{page}")
-
-    notion_reference = f"[Notion]({page['url']})"
-    task.update(description=notion_reference)
 
 
 def get_recently_added_tasks(todoist_api: todoist.TodoistAPI = None, days_old=None, get_checked=True):
