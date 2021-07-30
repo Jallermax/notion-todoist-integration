@@ -179,8 +179,8 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
                                                         pformat.single_rich_text] and md_link_pattern.search(
                                                         todoist_val):
             rich_text_objects = parse_md_string_to_rich_text_objects(todoist_val)
-            current_prop_values.append(rich_text_objects)
-            current_prop_raw_values.append(parse_md_string_to_notion_view(todoist_val))
+            current_prop_values.extend(rich_text_objects)
+            current_prop_raw_values.extend(parse_md_string_to_notion_view(todoist_val))
             continue
 
         if 'link' in mappings.keys():
