@@ -245,9 +245,14 @@ class PropertyParser:
         return ','.join([r['id'] for r in prop]) if prop else None
 
     @staticmethod
-    def date_wo_tz(page: dict, name: str):
+    def date(page: dict, name: str):
         prop = PropertyParser.generic_prop(page, name, 'date')
-        return prop['start'][:19] if prop else None
+        return prop['start'] if prop else None
+
+    @staticmethod
+    def date_wo_tz(page: dict, name: str):
+        date_prop = PropertyParser.date(page, name)
+        return date_prop[:19] if date_prop else None
 
     @staticmethod
     def formula_start_date(page: dict, name: str):

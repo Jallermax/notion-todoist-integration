@@ -7,6 +7,7 @@ import notion
 import todoist_utils
 import todoist
 
+from dateutil import parser
 from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
 
@@ -256,9 +257,12 @@ def sync_updated_tasks(sync_created=True, sync_completed=True,
         by_task_id_and_after_sync_filter = [
             {"and": [{"property": todoist_id_text_prop, "text": {"equals": str(upd_id['id'])}},
                      {"property": last_synced_date_prop,
-                      "date": {"before": updated_events[upd_id['id']]}}]} for upd_id in upd_tasks_chunk]
+                      "date": {"on_or_before": updated_events[upd_id['id']]}}]} for upd_id in upd_tasks_chunk]
         query = {"filter": {"or": by_task_id_and_after_sync_filter}}
         entries_to_update.extend(notion.read_database(secrets.MASTER_TASKS_DB_ID, query))
+        # Filter notion entries by date and time since api call filters only by date ignoring time
+        entries_to_update = [e for e in entries_to_update if pparser.date(e, last_synced_date_prop) < updated_events[
+            int(pparser.rich_text(e, todoist_id_text_prop))]]
 
     metadata = notion.read_database_metadata(secrets.MASTER_TASKS_DB_ID)['properties']
     for entry in entries_to_update:
