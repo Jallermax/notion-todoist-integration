@@ -274,8 +274,9 @@ def update_properties(notion_task, todoist_task, prop_keys_to_update, db_metadat
         mapped_type = db_metadata[mapped_name]['type']
         parser = get_notion_formatter_mapper().get(mapped_type)['parser']
 
-        if todoist_val is not None:
-            props = parse_prop_list_to_dict([todoist_val], prop_key, db_metadata, prop_key == 'content')
+        if todoist_val is not None and (not isinstance(todoist_val, list) or len(todoist_val) != 0):
+            props = parse_prop_list_to_dict(todoist_val if isinstance(todoist_val, list) else [todoist_val], prop_key,
+                                            db_metadata, prop_key == 'content')
             new_val = reduce(lambda x, y: f"{x}{y}", props[mapped_name]['raw_val'], '')
             formatted_values = props[mapped_name]['values']
         else:

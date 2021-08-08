@@ -268,7 +268,7 @@ def sync_updated_tasks(sync_created=True, sync_completed=True,
     for entry in entries_to_update:
         todoist_task = next(
             filter(lambda x: str(x['id']) == pparser.rich_text(entry, todoist_id_text_prop), updated_tasks))
-        props_to_check_for_upd = ['content', 'due.date', 'checked', 'priority']
+        props_to_check_for_upd = ['content', 'due.date', 'checked', 'priority', 'notes']
         props_to_upd = todoist_utils.update_properties(entry, todoist_task, props_to_check_for_upd, metadata)
 
         if props_to_upd:
