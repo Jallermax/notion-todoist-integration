@@ -259,10 +259,10 @@ def get_events(todoist_api: todoist.TodoistAPI = None, limit=1000000, batch_size
     return events
 
 
-def update_properties(notion_task, todoist_task, props_to_update, db_metadata):
+def update_properties(notion_task, todoist_task, prop_keys_to_update, db_metadata):
     mapper = load_todoist_to_notion_mapper()
     props_to_upd = {}
-    for prop_key in props_to_update:
+    for prop_key in prop_keys_to_update:
         mappings = mapper[prop_key]
         # TODO handle list properties
         todoist_val = deep_get(todoist_task.data, prop_key)
@@ -280,7 +280,11 @@ def update_properties(notion_task, todoist_task, props_to_update, db_metadata):
             formatted_values = props[mapped_name]['values']
         else:
             new_val = None
-            formatted_values = [None]
+            if mapped_type in ['title', 'rich_text', 'relation']:
+                formatted_values = [None]
+            else:
+                props = parse_prop_list_to_dict([None], prop_key, db_metadata, prop_key == 'content')
+                formatted_values = props[mapped_name]['values']
         old_val = parser(notion_task, mapped_name)
 
         if new_val != old_val:

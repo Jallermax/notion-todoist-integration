@@ -234,9 +234,9 @@ def sync_deleted_tasks(todoist_id_text_prop='TodoistTaskId',
     for task in notion_tasks_to_delete:
         success, page = notion.update_page(task['id'], archive=True, **update_to_delete)
         if success:
-            _LOG.info(f"Notion task '{pparser.title(task, 'Name')}' was marked ToDelete: {page['url']}")
+            _LOG.info(f"Notion task '{pparser.title(task, 'Name')}' was archived: {page['url']}")
         else:
-            _LOG.error(f"Error marking Notion task '{pparser.title(task, 'Name')}' ToDelete: {task['url']=}")
+            _LOG.error(f"Error archiving Notion task '{pparser.title(task, 'Name')}': {task['url']=}")
 
 
 def chunks(lst, n):
