@@ -95,7 +95,7 @@ def parse_prop(task, prop_key, db_metadata, convert_md_links):
 
 def parse_prop_list(todoist_val_list, prop_key, db_metadata, convert_md_links):
     # TODO add caching of label_tag_mapping
-    props = parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_links)
+    props = format_prop_list_to_notion_dict(todoist_val_list, prop_key, db_metadata, convert_md_links)
 
     listed_props = {}
     listed_blocks = []
@@ -117,9 +117,10 @@ def parse_prop_list(todoist_val_list, prop_key, db_metadata, convert_md_links):
     return listed_props, listed_blocks
 
 
-def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_links):
+def format_prop_list_to_notion_dict(todoist_val_list, prop_key, db_metadata, convert_md_links, props=None, ):
     """
 
+    :param props:
     :param convert_md_links:
     :param db_metadata:
     :param prop_key:
@@ -128,7 +129,7 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
         {"POM": {"formatter": {"method": pformat.select, "list_values": False}, "values": [], "raw_val": []}}
     """
     label_mapper = get_label_tag_mapping() if prop_key == 'labels' else None
-    props = {}
+    props = props if props else {}
     mappings = load_todoist_to_notion_mapper()[prop_key]
     default_notion_values = mappings.get('default_values', {})
     for todoist_val in todoist_val_list:
@@ -260,33 +261,37 @@ def get_events(todoist_api: todoist.TodoistAPI = None, limit=1000000, batch_size
 
 
 def update_properties(notion_task, todoist_task, prop_keys_to_update, db_metadata):
-    mapper = load_todoist_to_notion_mapper()
+    # mapper = load_todoist_to_notion_mapper()
     props_to_upd = {}
+    props = {}
     for prop_key in prop_keys_to_update:
-        mappings = mapper[prop_key]
+        # mappings = mapper[prop_key]
         # TODO handle list properties
         todoist_val = deep_get(todoist_task.data, prop_key)
-        default_notion_values = mappings.get('default_values', {})
-        mapped_prop = mappings.get('values', {}).get(str(todoist_val), {})
-        mapped_name = mapped_prop.get('name', default_notion_values.get('name'))
-        if not mapped_name or mapped_name not in db_metadata.keys():
-            continue
-        mapped_type = db_metadata[mapped_name]['type']
-        parser = get_notion_formatter_mapper().get(mapped_type)['parser']
+        # default_notion_values = mappings.get('default_values', {})
+        # mapped_prop = mappings.get('values', {}).get(str(todoist_val), {})
+        # mapped_name = mapped_prop.get('name', default_notion_values.get('name'))
+        # if not mapped_name or mapped_name not in db_metadata.keys():
+        #     continue
+        # mapped_type = db_metadata[mapped_name]['type']
+        # parser = get_notion_formatter_mapper().get(mapped_type)['parser']
 
         if todoist_val is not None and (not isinstance(todoist_val, list) or len(todoist_val) != 0):
-            props = parse_prop_list_to_dict(todoist_val if isinstance(todoist_val, list) else [todoist_val], prop_key,
-                                            db_metadata, prop_key == 'content')
-            new_val = reduce(lambda x, y: f"{x}{y}", props[mapped_name]['raw_val'], '')
-            formatted_values = props[mapped_name]['values']
+            props = format_prop_list_to_notion_dict(todoist_val if isinstance(todoist_val, list) else [todoist_val], prop_key,
+                                                    db_metadata, prop_key == 'content', props)
+            # parser = props[mapped_name]['formatter']['parser']
+            # new_val = reduce(lambda x, y: f"{x}{y}", props[mapped_name]['raw_val'], '')
+            # formatted_values = props[mapped_name]['values']
         else:
+            #
             new_val = None
             if mapped_type in ['title', 'rich_text', 'relation']:
                 formatted_values = [None]
             else:
-                props = parse_prop_list_to_dict([None], prop_key, db_metadata, prop_key == 'content')
+                props = format_prop_list_to_notion_dict([None], prop_key, db_metadata, prop_key == 'content')
                 formatted_values = props[mapped_name]['values']
         old_val = parser(notion_task, mapped_name)
+
 
         if new_val != old_val:
             _LOG.debug(f"for {todoist_task['content']=}, {prop_key=} \n\t\t{old_val=}, \n\t\t{new_val=}")

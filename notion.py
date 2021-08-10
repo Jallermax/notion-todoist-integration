@@ -96,11 +96,15 @@ class PropertyFormatter:
 
     @staticmethod
     def text(text):
+        if text is None:
+            return None
         text = text if isinstance(text, str) else str(text)
         return {"text": {"content": text}}
 
     @staticmethod
     def link(text, link):
+        if not link:
+            return PropertyFormatter.text(text)
         text = text if isinstance(text, str) else str(text)
         link = link if isinstance(link, str) else str(link)
         return {"text": {"content": text, "link": {"url": link}}}
