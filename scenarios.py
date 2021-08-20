@@ -203,7 +203,8 @@ def sync_created_tasks(all_tasks=False, sync_completed=False, todoist_id_text_pr
 
     # 1.Get tasks with notes from Todoist
     all_tasks = todoist_api.items.all(
-        lambda t: sync_completed or t['checked'] == 0) if all_tasks else get_recently_added_tasks(
+        lambda t: t.data.get('is_deleted') == 0 and (
+                    sync_completed or t['checked'] == 0)) if all_tasks else get_recently_added_tasks(
         todoist_api, get_checked=sync_completed)
 
     append_notes_to_tasks(all_tasks, todoist_api)
@@ -312,6 +313,8 @@ def get_notion_tasks_to_delete(todoist_id_text_prop):
     todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
     todoist_api.sync()
     events = todoist_utils.get_events(object_type='item', event_type='deleted')
+    if not events:
+        return []
     deleted_tasks_id = [str(x['object_id']) for x in events]
     by_deleted_id_filter = [{"property": todoist_id_text_prop, "text": {"equals": del_id}} for del_id in
                             deleted_tasks_id]

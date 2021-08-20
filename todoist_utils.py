@@ -23,7 +23,7 @@ class NoneStrategy(Enum):
 
 def load_todoist_to_notion_mapper():
     # TODO add file parametric based on running scenario + caching
-    file = open("mappings.json", "r")
+    file = open("mappings.json", "r", encoding="utf-8")
 
     contents = file.read()
     dictionary = ast.literal_eval(contents)
