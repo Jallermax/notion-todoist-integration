@@ -59,6 +59,12 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
 
 
 def create_page(parent_id, *args, **kwargs):
+    content = kwargs.get('content', '')
+    if len(content) > 2000:
+        _LOG.warning('Content truncated to 2000 characters')
+        content = content[:2000]
+        kwargs['content'] = content
+    return requests.post(url, headers=headers, json=params)
     url = f"https://api.notion.com/v1/pages/"
 
     params = {"parent": {"database_id": parent_id}, "properties": kwargs}
@@ -69,6 +75,12 @@ def create_page(parent_id, *args, **kwargs):
 
 
 def update_page(page_id, **kwargs):
+    content = kwargs.get('content', '')
+    if len(content) > 2000:
+        _LOG.warning('Content truncated to 2000 characters')
+        content = content[:2000]
+        kwargs['content'] = content
+    return requests.patch(url, headers=headers, json=properties)
     url = f"https://api.notion.com/v1/pages/{page_id}"
 
     properties = {"properties": kwargs}
