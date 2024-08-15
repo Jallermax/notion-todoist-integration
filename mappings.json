@@ -7,9 +7,32 @@
       "expression": "'p' + str(5-value)"
     }
   },
+  "id": {
+    "none_strategy": "value-as-is",
+    "link": "https://app.todoist.com/app/task/{}",
+    "default_values": {
+      "name": "TodoistTaskId",
+      "type": "rich_text"
+    }
+  },
+  "content": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Name",
+      "type": "title"
+    }
+  },
+  "is_completed": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Status",
+      "type": "select",
+      "expression": "'Done' if bool(value) else 'Not started'"
+    }
+  },
   "labels": {
-    "none_strategy": "ignore",
-    "link": "https://todoist.com/app/label/{}",
+    "none_strategy": "map-by-name",
+    "link": "https://app.todoist.com/app/label/{}",
     "default_values": {
       "name": "Todoist Tags",
       "type": "relation"
@@ -59,12 +82,17 @@
         "name": "Mindset",
         "type": "select",
         "value": "Communication"
+      },
+      "1611136965": {
+        "name": "Status",
+        "type": "select",
+        "value": "Not started"
       }
     }
   },
   "project_id": {
     "none_strategy": "ignore",
-    "link": "https://todoist.com/app/project/{}",
+    "link": "https://app.todoist.com/app/project/{}",
     "default_values": {
       "name": "Projects",
       "type": "relation"
@@ -72,53 +100,84 @@
     "values": {
       "2219986415": {
         "value": "3142b10bfeac4b669a24d4603efb2f3a",
-        "comment": "ML career path"
+        "comment": "DS career -> ML career path"
       },
-      "2267650566": {
-        "value": "b3ab76ee27634672b6fa966415248e5d",
-        "comment": "Integration app"
+      "2269468283": {
+        "value": "8fb8ad5d5a9a4e61b27d0ad19bd525c7",
+        "comment": "Assessment preparation -> Prepare for an interview (Assessment)"
+      },
+      "1771235159": {
+        "value": "ca2f15da2b6b417fadb2192b54728795",
+        "comment": "Personal->Personal"
+      },
+      "1782707736": {
+        "value": "cbf9670d61a142149448db6249718268",
+        "comment": "Pet_projects"
+      },
+      "1771235160": {
+        "value": "8fad26664a334af99ee21fdfbde34f80",
+        "comment": "Shopping -> Shopping List temp"
+      },
+      "2253243496": {
+        "value": "fda49e0655d34b8faa5e296891cc4744",
+        "comment": "Periodical actions -> Periodic Maintenances"
       },
       "2269312293": {
         "value": "ac0eedc1713d4fd4a40fffe073c18e74",
-        "comment": "Notion Organization"
+        "comment": "Notion system organization _Second Brain_ ->"
+      },
+      "2269468150": {
+        "value": "659bfa23d58043b8a3fe101bae68f843",
+        "comment": "Set-up HA automation"
+      },
+      "2269468198": {
+        "value": "6f34e3c22261486dbe28c276949f8fd6",
+        "comment": "Personal InfoSec -> Achieve personal Information Security"
+      },
+      "2269468239": {
+        "value": "520d1f1c7627420cb1ab596ace592c88",
+        "comment": "Gain control of own health"
+      },
+      "2269468332": {
+        "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
+        "name": "Outcomes",
+        "type": "relation",
+        "comment": "Financial Wellness Outcome"
+      },
+      "2267650566": {
+        "value": "5417565d11fd43ea88d397e56f95b319",
+        "comment": "Knowledge Nexus GraphRAG [Notion](https://www.notion.so/jallermax/5417565d11fd43ea88d397e56f95b319)"
+      },
+      "2269468259": {
+        "value": "24c7b6de7528429ea89d669477a3c236",
+        "comment": "AI Ambassador initiative -> AI Ambassador (Prompt library)"
+      },
+      "1771235158": {
+        "value": "ad7fbb3d9e604ca998a76215bad64e5b",
+        "comment": "Inbox"
       }
-    }
-  },
-  "notes": {
-    "none_strategy": "value-as-is",
-    "default_values": {
-      "name": "Notes",
-      "type": "rich_text",
-      "expression": "'* ' + value + '\\n'"
-    }
-  },
-  "id": {
-    "none_strategy": "value-as-is",
-    "link": "https://todoist.com/showTask?id={}",
-    "default_values": {
-      "name": "TodoistTaskId",
-      "type": "rich_text"
-    }
-  },
-  "content": {
-    "none_strategy": "value-as-is",
-    "default_values": {
-      "name": "Name",
-      "type": "title"
-    }
-  },
-  "checked": {
-    "none_strategy": "value-as-is",
-    "default_values": {
-      "name": "Done",
-      "type": "checkbox"
     }
   },
   "due.date": {
     "none_strategy": "value-as-is",
     "default_values": {
-      "name": "Date",
+      "name": "Due",
       "type": "date"
+    }
+  },
+  "due.datetime": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Due",
+      "type": "date"
+    }
+  },
+  "comments": {
+    "none_strategy": "value-as-is",
+    "default_values": {
+      "name": "Notes",
+      "type": "rich_text",
+      "expression": "'* ' + value + '\\n'"
     }
   }
 }
