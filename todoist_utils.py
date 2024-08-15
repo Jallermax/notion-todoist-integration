@@ -1,51 +1,63 @@
 import ast
 import logging
 import re
+from dataclasses import dataclass, field
 from enum import Enum
-from functools import reduce
+from functools import reduce, lru_cache
 
-import secrets
-import todoist
+from todoist_api_python.api import TodoistAPI
+from todoist_api_python.models import (Task, Comment)
+
 import notion
+import secrets
 from notion import PropertyFormatter as pformat
 from notion import PropertyParser as pparser
 
 _LOG = logging.getLogger(__name__)
-md_link_pattern = re.compile(r"\[(.+)\]\((https?:\/\/[\w\d./?=+\-#%&]+)\)")
-page_id_from_url_pattern = re.compile(r"\[.+\]\(https?:\/\/.*([\d\w]{32})\)")
+MD_LINK_PATTERN = re.compile(r"\[([^]]*)]\((https?://[^\s)]+)\)|(https?://[^\s)]+)")
+NOTION_URL_PATTERN = re.compile("\\[.+]\\("
+                                "(https://www.notion.so)?"  # Notion host
+                                "/([a-zA-Z0-9-]+/)?"  # Username
+                                "([a-zA-Z0-9-]+-)?"  # Page name
+                                "([a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12})"  # UUID
+                                "(\\?[a-zA-Z0-9%=\\-&]*)?\\)")
 
 
 class NoneStrategy(Enum):
-    IGNORE = 'ignore'
+    IGNORE = 'ignore'  # Ignore property value if it is not mapped
     VALUE_AS_IS = 'value-as-is'
-    MAP_BY_NAME = 'map-by-name'
+    MAP_BY_NAME = 'map-by-name'  # Map property values (labels) to relations by identical name
 
 
-def load_todoist_to_notion_mapper():
-    # TODO add file parametric based on running scenario + caching
-    file = open("mappings.json", "r", encoding="utf-8")
-
-    contents = file.read()
-    dictionary = ast.literal_eval(contents)
-
-    file.close()
-    return dictionary
+@dataclass
+class TodoistTask:
+    task: Task
+    comments: list[Comment] = field(default_factory=list)
+    notion_url: str | None = None
 
 
-def get_label_tag_mapping(todoist_api: todoist.TodoistAPI = None, n_tags=None, todoist_tags_text_prop='Todoist Tags'):
+@lru_cache
+def load_todoist_to_notion_mapper() -> dict:
+    # TODO add file parametric based on running scenario
+    with open("mappings.json", "r", encoding="utf-8") as file:
+        contents = file.read()
+        return ast.literal_eval(contents)
+
+
+@lru_cache
+def get_label_tag_mapping(todoist_api: TodoistAPI = None, n_tags=None, todoist_tags_text_prop='Todoist Tags'):
     """
     Creates an id mapping between 'Todoist Tags' property in Notion Master Tag DB and Todoist Labels by name.
     :return: dict(todoist_label_id: notion_tag_page_id)
     """
     if not todoist_api:
-        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
-        todoist_api.sync()
+        todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
 
-    labels = {label['name']: label['id'] for label in todoist_api.labels.all()}
+    labels = {label.name: label.id for label in todoist_api.get_labels()}
     notion_master_tags = n_tags if n_tags else notion.read_database(secrets.MASTER_TAG_DB)
-    notion_tags = {pparser.rich_text(page, todoist_tags_text_prop): page['id'] for page in notion_master_tags if
-                   pparser.rich_text(page, todoist_tags_text_prop)}
-    tag_mapping = {labels[key]: notion_tags[key] for key in notion_tags}
+    notion_tags = {tag: page['id'] for page in notion_master_tags if
+                   (tag := pparser.rich_text(page, todoist_tags_text_prop))}
+    tag_mapping = {labels[key]: notion_tags[key] for key in notion_tags if key in labels}
 
     return tag_mapping
 
@@ -64,12 +76,12 @@ def get_default_values():
     return {'type': 'rich_text'}
 
 
-def deep_get(dictionary, keys, default=None):
-    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
+def deep_get(task_dict, keys, default=None):
+    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), task_dict)
 
 
-def map_property(task, prop_name: str, db_metadata, props: dict = None, child_blocks: list = None,
-                 convert_md_links=False):
+def map_property(task: TodoistTask, prop_name: str, db_metadata: dict, props: dict = None, child_blocks: list = None,
+                 convert_md_links=False) -> tuple[dict | None, list | None]:
     if isinstance(props, type(None)):
         props = {}
     if isinstance(child_blocks, type(None)):
@@ -83,18 +95,16 @@ def map_property(task, prop_name: str, db_metadata, props: dict = None, child_bl
     return props, child_blocks
 
 
-def parse_prop(task, prop_key, db_metadata, convert_md_links):
-    if not task or not deep_get(task.data, prop_key):
+def parse_prop(task: TodoistTask, prop_key: str, db_metadata: dict, convert_md_links: bool) -> tuple[
+    dict | None, list | None]:
+    if not task or not (todoist_val := deep_get(task.task.to_dict(), prop_key)):
         return None, None
 
-    todoist_val = deep_get(task.data, prop_key)
-    if isinstance(todoist_val, list):
-        return parse_prop_list(todoist_val, prop_key, db_metadata, convert_md_links)
-    return parse_prop_list([todoist_val], prop_key, db_metadata, convert_md_links)
+    value_list = todoist_val if isinstance(todoist_val, list) else [todoist_val]
+    return parse_prop_list(value_list, prop_key, db_metadata, convert_md_links)
 
 
-def parse_prop_list(todoist_val_list, prop_key, db_metadata, convert_md_links):
-    # TODO add caching of label_tag_mapping
+def parse_prop_list(todoist_val_list, prop_key, db_metadata, convert_md_links) -> tuple[dict, list]:
     props = parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_links)
 
     listed_props = {}
@@ -166,6 +176,7 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
 
         # If property value is not mapped, ignore it
         if mappings.get('none_strategy') == NoneStrategy.IGNORE.value:
+            _LOG.warning(f"Property {prop_key} value {todoist_val} is not mapped. Ignoring it.")
             continue
 
         if mappings.get(
@@ -175,12 +186,11 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
             continue
 
         # If property value is not mapped, parse it according to NoneStrategy.VALUE_AS_IS and default_values rules
-        if convert_md_links and formatter['method'] in [pformat.single_title,
-                                                        pformat.single_rich_text] and md_link_pattern.search(
-                                                        todoist_val):
+        if convert_md_links and formatter['method'] in \
+                [pformat.single_title, pformat.single_rich_text] and MD_LINK_PATTERN.search(todoist_val):
             rich_text_objects = parse_md_string_to_rich_text_objects(todoist_val)
             current_prop_values.extend(rich_text_objects)
-            current_prop_raw_values.extend(parse_md_string_to_notion_view(todoist_val))
+            current_prop_raw_values.append(parse_md_string_to_notion_view(todoist_val))
             continue
 
         if 'link' in mappings.keys():
@@ -200,38 +210,57 @@ def parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_
     return props
 
 
-def parse_md_string_to_rich_text_objects(todoist_val) -> list:
-    # TODO add handling of multiple links in string
-    regs = md_link_pattern.search(todoist_val).regs
-    notion_link = pformat.link(todoist_val[regs[1][0]:regs[1][1]] + '🔗', todoist_val[regs[2][0]:regs[2][1]])
-    begin_text = todoist_val[:regs[0][0]]
-    end_text = todoist_val[regs[0][1]:]
-    text_blocks = (pformat.text(begin_text) if len(begin_text) > 0 else None, notion_link,
-                   pformat.text(end_text) if len(end_text) > 0 else None)
-    return [b for b in text_blocks if b]
+def parse_md_string_to_rich_text_objects(todoist_val: str) -> list:
+    rich_text_blocks = []
+    last_index = 0
+
+    for match in MD_LINK_PATTERN.finditer(todoist_val):
+        # Text before the match
+        if match.start() > last_index:
+            rich_text_blocks.append(pformat.text(todoist_val[last_index:match.start()]))
+
+        if match.group(3):  # This matches a plain URL
+            rich_text_blocks.append(pformat.link(match.group(3), match.group(3)))
+        else:  # This matches a Markdown link
+            rich_text_blocks.append(pformat.link(f"{match.group(1)}🔗", match.group(2)))
+
+        last_index = match.end()
+
+    # Add any remaining text after the last match
+    if last_index < len(todoist_val):
+        rich_text_blocks.append(pformat.text(todoist_val[last_index:]))
+
+    return rich_text_blocks
 
 
 def parse_md_string_to_notion_view(todoist_val) -> str:
-    regs = md_link_pattern.search(todoist_val).regs
-    return f"{todoist_val[:regs[0][0]]}" \
-           f"[{todoist_val[regs[1][0]:regs[1][1]]}🔗]({todoist_val[regs[2][0]:regs[2][1]]})" \
-           f"{todoist_val[regs[0][1]:]}"
+    def replace(match: re.Match) -> str:
+        if match.group(3):  # This is a plain URL
+            return match.group(3)
+        else:  # This is a Markdown link
+            link_text = match.group(1)
+            link_url = match.group(2)
+            return f"[{link_text}🔗]({link_url})"
+
+    modified_text = MD_LINK_PATTERN.sub(replace, todoist_val)
+    return modified_text
 
 
-def extract_link_to_parent(task, todoist_api: todoist.TodoistAPI = None):
+def extract_link_to_parent(task: TodoistTask, todoist_api: TodoistAPI = None):
     if not todoist_api:
-        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
-        todoist_api.sync()
+        todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
 
-    if task['parent_id']:
-        parent_task = todoist_api.items.get_by_id(task['parent_id'])
-        parent_page_id = page_id_from_url_pattern.findall(parent_task.data.get('description'))
-        if parent_page_id:
-            return parent_page_id[0]
+    parent_id = task.task.parent_id
+    if not parent_id:
+        return None
+    parent_task = todoist_api.get_task(parent_id)
+    match = re.match(NOTION_URL_PATTERN, parent_task.description)
+    if match:
+        return match.group(4)
     return None
 
 
-def get_events(todoist_api: todoist.TodoistAPI = None, limit=1000000, batch_size=100, **kwargs):
+def get_events(todoist_api: TodoistAPI = None, limit=1000000, batch_size=100, **kwargs):
     """
     For todoist_api doc possible kwargs see https://developer.todoist.com/sync/v8/?shell#get-activity-logs
     :param todoist_api: TODO move to context
@@ -240,8 +269,7 @@ def get_events(todoist_api: todoist.TodoistAPI = None, limit=1000000, batch_size
     :return: event object (see https://developer.todoist.com/sync/v8/?shell#activity).
     """
     if not todoist_api:
-        todoist_api = todoist.api.TodoistAPI(token=secrets.TODOIST_TOKEN)
-        todoist_api.sync()
+        todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
 
     if 0 > batch_size > 100:
         _LOG.warning(f"{batch_size=}, but value must be between 1 and 100. Setting value to 100")
