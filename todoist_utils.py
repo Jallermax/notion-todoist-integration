@@ -6,6 +6,8 @@ from enum import Enum
 from functools import reduce, lru_cache
 
 from todoist_api_python.api import TodoistAPI
+from synctodoist import TodoistAPI as SyncTodoistAPI
+from synctodoist.managers import command_manager
 from todoist_api_python.models import (Task, Comment)
 
 import notion
@@ -65,6 +67,8 @@ class TodoistToNotionMapper:
     def __init__(self):
         self.mappings = load_todoist_to_notion_mapper()
         self.todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
+        self.sync_api = SyncTodoistAPI(api_key=secrets.TODOIST_TOKEN)
+        self.sync_api.sync(True)
 
     def get_mapping(self, prop_key: str) -> dict:
         return self.mappings[prop_key]
@@ -104,11 +108,12 @@ class TodoistToNotionMapper:
             _LOG.warning(f"{batch_size=}, but value must be between 1 and 100. Setting value to 100")
             batch_size = 100
 
+        self.sync_api.sync()
         events = []
         count = batch_size
         offset = 0
         while len(events) < count:
-            result = self.todoist_api.activity.get(**kwargs, limit=batch_size, offset=offset)
+            result = command_manager.get('activity/get')
             events.extend(result['events'])
             if offset == 0:
                 count = min(result['count'], limit)
@@ -252,10 +257,9 @@ class TodoistToNotionMapper:
         return props
 
     def update_properties(self, notion_task, todoist_task, prop_keys_to_update, db_metadata):
-        mapper = self.mappings
         props_to_upd = {}
         for prop_key in prop_keys_to_update:
-            mappings = mapper[prop_key]
+            mappings = self.get_mapping(prop_key)
             # TODO handle list properties
             todoist_val = deep_get_task_prop(todoist_task.data, prop_key)
             default_notion_values = mappings.get('default_values', {})
