@@ -77,20 +77,20 @@ class Scenarios:
     def gather_metadata(self):
         # Todoist
         print("Todoist Projects:")
-        for prj in self.todoist_api.state['projects']:
-            print(f"name: {prj['name']}; id: {prj['id']}")
+        for prj in self.todoist_api.get_projects():
+            print(f"name: {prj.name}; id: {prj.id}")
         print("Todoist Labels:")
-        for prj in self.todoist_api.state['labels']:
-            print(f"name: {prj['name']}; id: {prj['id']}")
+        for label in self.todoist_api.get_labels():
+            print(f"name: {label.name}; id: {label.id}")
 
         # Notion
         # db_list = notion.read_databases_list()
         # print("databases list: ", db_list)
-        maintenance_metadata = notion.read_database_metadata(secrets.MAINTENANCE_DATABASE_ID)
-        print("Maintenance DB metadata:")
+        master_tasks_db_metadata = notion.read_database_metadata(secrets.MASTER_TASKS_DB_ID)
+        print("Master task DB metadata:")
         p_dict = {k: {'type': v['type'], v['type']: v[v['type']] if len(v[v['type']]) > 0 else None} for k, v in
-                  maintenance_metadata['properties'].items()}
-        print(f"id: {maintenance_metadata['id']}; name: {maintenance_metadata['title'][0]['plain_text']};\n"
+                  master_tasks_db_metadata['properties'].items()}
+        print(f"id: {master_tasks_db_metadata['id']}; name: {master_tasks_db_metadata['title'][0]['plain_text']};\n"
               f"properties: {p_dict}")
 
     def sync_created_tasks(self, all_tasks=False, sync_completed=False, todoist_id_text_prop='TodoistTaskId'):
