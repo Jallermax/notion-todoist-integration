@@ -26,7 +26,7 @@
     "none_strategy": "value-as-is",
     "default_values": {
       "name": "Status",
-      "type": "select",
+      "type": "status",
       "expression": "'Done' if bool(value) else 'Not started'"
     }
   },
@@ -84,7 +84,7 @@
       },
       "_in_progress": {
         "name": "Status",
-        "type": "select",
+        "type": "status",
         "value": "In progress"
       }
     }

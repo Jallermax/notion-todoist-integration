@@ -51,7 +51,9 @@ def get_notion_formatter_mapper():
             'relation': {'method': PFormat.single_relation, 'parser': PParser.relation, 'list_values': True},
             'select': {'method': PFormat.select, 'parser': PParser.select, 'list_values': False},
             'checkbox': {'method': PFormat.checkbox, 'parser': PParser.checkbox, 'list_values': False},
-            'date': {'method': PFormat.date, 'parser': PParser.date_wo_tz, 'list_values': False}}
+            'date': {'method': PFormat.date, 'parser': PParser.date_wo_tz, 'list_values': False},
+            'status': {'method': PFormat.status, 'parser': PParser.status, 'list_values': False}
+            }
 
 
 def get_default_property_values():
@@ -144,9 +146,10 @@ class TodoistToNotionMapper:
         for k, v in props.items():
             if len(v['values']) == 0:
                 continue
-            if k not in db_metadata.keys():
+            if k not in db_metadata.keys() or not v['formatter']:
                 listed_blocks.append(PFormat.heading_block(k))
                 listed_blocks.append(PFormat.paragraph_block(*v['values']))
+            # Wrap if property is complex types
             elif db_metadata[k]['type'] == 'title':
                 listed_props[k] = PFormat.title(v['values'])
             elif db_metadata[k]['type'] == 'rich_text':
@@ -197,7 +200,11 @@ class TodoistToNotionMapper:
             # Parse mapped property value according to mapping file
             if mapped_value:
                 current_prop_raw_values.append(mapped_value)
-                if formatter['method'] == PFormat.single_title:
+                if not formatter:
+                    _LOG.warning(f"Formatter for {prop_key} value {todoist_val} is not defined.")
+                    current_prop_values.append(PFormat.text(mapped_value))
+                    continue
+                elif formatter['method'] == PFormat.single_title:
                     current_prop_values.append(PFormat.text(mapped_value))
                     continue
                 elif formatter['method'] == PFormat.single_rich_text:

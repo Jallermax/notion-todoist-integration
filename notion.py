@@ -11,7 +11,8 @@ LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
 headers = {
     "Authorization": "Bearer " + secrets.NOTION_TOKEN,
-    "Notion-Version": "2021-05-13"
+    "Notion-Version": "2022-06-28",
+    "Content-Type": "application/json"
 }
 
 
@@ -156,6 +157,11 @@ class PropertyFormatter:
     """
 
     @staticmethod
+    def status(name, property_obj=True):
+        name = name if isinstance(name, str) else str(name)
+        return {"status": {"name": name}} if property_obj else PropertyFormatter.text(name)
+
+    @staticmethod
     def title(formatted_props: list, property_obj=True):
         return {"title": formatted_props} if property_obj else PropertyFormatter.paragraph_block(*formatted_props)
 
@@ -232,6 +238,11 @@ class PropertyParser:
     @staticmethod
     def select(page: dict, name: str):
         prop = PropertyParser.generic_prop(page, name, 'select')
+        return prop['name'] if prop else None
+
+    @staticmethod
+    def status(page: dict, name: str):
+        prop = PropertyParser.generic_prop(page, name, 'status')
         return prop['name'] if prop else None
 
     @staticmethod
