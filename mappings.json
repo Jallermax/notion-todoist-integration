@@ -31,62 +31,61 @@
     }
   },
   "labels": {
-    "none_strategy": "map-by-name",
+    "none_strategy": "ignore",
     "link": "https://app.todoist.com/app/label/{}",
     "default_values": {
-      "name": "Todoist Tags",
       "type": "relation"
     },
     "values": {
-      "2157061836": {
+      "ML_prjt": {
         "name": "Projects",
         "value": "3142b10bfeac4b669a24d4603efb2f3a",
         "comment": "ML career path"
       },
-      "2149478237": {
+      "💵finances": {
         "name": "Outcomes",
         "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
         "comment": "finances"
       },
-      "1611137796": {
+      "_-5mins": {
         "name": "POM",
         "type": "select",
         "value": "🍅"
       },
-      "1611137912": {
+      "_-25mins": {
         "name": "POM",
         "type": "select",
         "value": "🍅"
       },
-      "1611137916": {
+      "_-1hr": {
         "name": "POM",
         "type": "select",
         "value": "🍅🍅"
       },
-      "1611137917": {
+      "_1hr_plus": {
         "name": "POM",
         "type": "select",
         "value": "🍅🍅🍅"
       },
-      "2157134968": {
+      "maintenance": {
         "name": "Mindset",
         "type": "select",
         "value": "Maintenance"
       },
-      "2157135027": {
+      "creativity": {
         "name": "Mindset",
         "type": "select",
         "value": "Creative"
       },
-      "2157134993": {
+      "communication": {
         "name": "Mindset",
         "type": "select",
         "value": "Communication"
       },
-      "1611136965": {
+      "_in_progress": {
         "name": "Status",
         "type": "select",
-        "value": "Not started"
+        "value": "In progress"
       }
     }
   },

@@ -1,17 +1,18 @@
 import logging
 
-from scenarios import sync_periodic_actions, sync_created_tasks, sync_deleted_tasks, sync_updated_tasks
+from scenarios import Scenarios
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 logging.getLogger('urllib3').setLevel(logging.INFO)
 
 if __name__ == '__main__':
+    scenarios = Scenarios()
     print('Started scenarios...')
     # gather_metadata(todoist_api)
-    sync_created_tasks(all_tasks=True, sync_completed=False)  # One time migration of all tasks to Notion
+    scenarios.sync_created_tasks(all_tasks=True, sync_completed=False)  # One time migration of all tasks to Notion
     # while True:
-    #     sync_deleted_tasks()
-    #     sync_updated_tasks()
-    #     sync_created_tasks(sync_completed=True)
+    #     scenarios.sync_deleted_tasks()
+    #     scenarios.sync_updated_tasks()
+    #     scenarios.sync_created_tasks(sync_completed=True)
     #     # sync_periodic_actions()
     #     time.sleep(60)
