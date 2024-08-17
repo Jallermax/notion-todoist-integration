@@ -1,10 +1,12 @@
 import datetime
 import json
 import logging
+from functools import reduce
+
 import pytz
 import requests
+
 import secrets
-from functools import reduce
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
@@ -33,7 +35,7 @@ def read_databases_list(**kwargs):
     return res.json()
 
 
-def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True):
+def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True) -> list[dict]:
     data = []
     query = raw_query
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
@@ -44,7 +46,7 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
         else:
             res = requests.post(url, headers=headers, json=query)
         if not process_response(res):
-            return
+            return data
         data.extend(res.json()['results'])
         has_more = all_batch and res.json()['has_more']
         if has_more:
@@ -58,6 +60,11 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     return data
+
+
+    """Fetch tasks already linked in Notion"""
+    query = {"filter": {"property": todoist_id_prop, "rich_text": {"is_not_empty": True}}}
+    return read_database(database_id, query)
 
 
 def create_page(parent_id, *args, **kwargs):

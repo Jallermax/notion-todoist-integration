@@ -2,9 +2,13 @@ import ast
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
 from functools import reduce, lru_cache
+from typing import Literal
 
+import httpx
+import pytz
 from todoist_api_python.api import TodoistAPI
 from synctodoist import TodoistAPI as SyncTodoistAPI
 from synctodoist.managers import command_manager
@@ -16,6 +20,7 @@ from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
 
 _LOG = logging.getLogger(__name__)
+LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 MD_LINK_PATTERN = re.compile(r"\[([^]]*)]\((https?://[^\s)]+)\)|(https?://[^\s)]+)")
 NOTION_URL_PATTERN = re.compile("\\[.+]\\("
                                 "(https://www.notion.so)?"  # Notion host
@@ -67,8 +72,6 @@ class TodoistToNotionMapper:
     def __init__(self):
         self.mappings = load_todoist_to_notion_mapper()
         self.todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
-        self.sync_api = SyncTodoistAPI(api_key=secrets.TODOIST_TOKEN)
-        self.sync_api.sync(True)
 
     def get_mapping(self, prop_key: str) -> dict:
         return self.mappings[prop_key]
@@ -87,7 +90,7 @@ class TodoistToNotionMapper:
 
         return tag_mapping
 
-    def extract_link_to_parent(self, task: TodoistTask):
+    def extract_parent_notion_uuid(self, task: TodoistTask):
         parent_id = task.task.parent_id
         if not parent_id:
             return None
@@ -96,29 +99,6 @@ class TodoistToNotionMapper:
         if match:
             return match.group(4)
         return None
-
-    def get_events(self, limit=1000000, batch_size=100, **kwargs):
-        """
-        For todoist_api doc possible kwargs see https://developer.todoist.com/sync/v8/?shell#get-activity-logs
-        :param limit: limit of all collected events available from Todoist.
-        :param batch_size: batch size for activities in one request.
-        :return: event object (see https://developer.todoist.com/sync/v8/?shell#activity).
-        """
-        if 0 > batch_size > 100:
-            _LOG.warning(f"{batch_size=}, but value must be between 1 and 100. Setting value to 100")
-            batch_size = 100
-
-        self.sync_api.sync()
-        events = []
-        count = batch_size
-        offset = 0
-        while len(events) < count:
-            result = command_manager.get('activity/get')
-            events.extend(result['events'])
-            if offset == 0:
-                count = min(result['count'], limit)
-            offset += batch_size
-        return events
 
     def map_property(self, task: TodoistTask, prop_name: str, db_metadata: dict, notion_props: dict = None,
                      child_blocks: list = None,
@@ -297,6 +277,125 @@ class TodoistToNotionMapper:
                 else:
                     props_to_upd[mapped_name] = formatted_values[0]
         return props_to_upd
+
+
+class TodoistFetcher:
+    def __init__(self):
+        self.todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
+        self.sync_api = SyncTodoistAPI(api_key=secrets.TODOIST_TOKEN)
+        self.sync_api.sync(True)
+
+    def get_completed_tasks(self, since: str = None, limit: int = 500, batch_size: int = 100) -> list[dict]:
+        """@since: datetime string in '2024-1-15T10:13:00' format"""
+        self.sync_api.sync()
+        params = {'limit': batch_size, 'offset': 0}
+        if since:
+            params['since'] = since
+        all_items = []
+        while len(all_items) < limit:
+            items = self._send_sync_get('completed/get_all', **params)['items']
+            all_items.extend(items)
+            params['offset'] += batch_size
+            if len(items) == 0:
+                break
+        return all_items
+
+    def get_events(self, limit=10000, batch_size=100,
+                   event_type: Literal['added', 'updated', 'deleted', 'completed', 'uncompleted'] = None,
+                   object_type: Literal['item', 'project', 'note'] = None) -> list[dict]:
+        """
+        For todoist_api doc possible kwargs see https://developer.todoist.com/sync/v9/#get-activity-logs
+        :param limit: limit of all collected events available from Todoist.
+        :param batch_size: batch size for activities in one request.
+        :param event_type: filter events by type (e.g. 'added', 'updated', 'deleted', 'completed',
+        'uncompleted', 'archived', 'unarchived', 'shared', 'left').
+        :param object_type: filter events by object type (e.g. 'item', 'project', 'note'),
+        :return: event objects (see https://developer.todoist.com/sync/v9/#activity).
+        """
+        if 0 > batch_size > 100:
+            _LOG.warning(f"{batch_size=}, but value must be between 1 and 100. Setting value to 100")
+            batch_size = 100
+
+        self.sync_api.sync()
+        events = []
+        count = batch_size
+        params = {'limit': batch_size, 'offset': 0}
+        if event_type:
+            params['event_type'] = event_type
+        if object_type:
+            params['object_type'] = object_type
+        while len(events) < count:
+            result = self._send_sync_get('activity/get', **params)
+            events.extend(result['events'])
+            if params['offset'] == 0:
+                count = min(result['count'], limit)
+            params['offset'] += batch_size
+        return events
+
+    def extract_parent_notion_uuid(self, task: TodoistTask) -> str | None:
+        parent_id = task.task.parent_id
+        if not parent_id:
+            return None
+        parent_task = self.todoist_api.get_task(parent_id)
+        match = re.match(NOTION_URL_PATTERN, parent_task.description)
+        if match:
+            return match.group(4)
+        return None
+
+    def get_recently_added_tasks(self, days_old=None, get_completed=True) -> list[Task]:
+        events: list[dict] = self.get_events(object_type='item', event_type='added')
+        since_date: datetime | None = datetime.now(LOCAL_TIMEZONE) - timedelta(days=days_old) if days_old else None
+        created_tasks: list[str] = list(x['object_id'] for x in events if not days_old
+                                        or datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ")
+                                        > since_date)
+        _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
+            f" for the last {days_old} days" if days_old else ""))
+        all_tasks = self.todoist_api.get_tasks(ids=created_tasks)
+        if get_completed:
+            completed_tasks = self.get_completed_tasks(
+                since=since_date.isoformat() if since_date else None)
+            all_tasks_ids = [task.id for task in all_tasks]
+            all_tasks.extend([Task.from_dict(task) for task in completed_tasks if task['id'] not in all_tasks_ids])
+
+        return all_tasks
+
+    def get_updated_tasks(self, sync_created: bool = True, sync_completed: bool = True) -> tuple[list, dict]:
+        """
+        @return: tuple of updated tasks and dict of task_id: event_date
+        """
+        events = self.get_events(object_type='item', event_type='updated')
+        if sync_completed:
+            events.extend(self.get_events(object_type='item', event_type='completed'))
+            # sort to have latest event_date after reducing to unique dict entry
+            events.sort(key=lambda k: k['event_date'])
+        updated_tasks_to_date = {x['object_id']: LOCAL_TIMEZONE.normalize(
+            pytz.timezone("UTC").localize(
+                datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ"))).isoformat() for x in events}
+
+        tasks_to_exclude = []
+        if not sync_created:
+            events = self.get_events(object_type='item', event_type='added')
+            tasks_to_exclude.extend([x['object_id'] for x in events])
+        tasks_to_exclude = list(set(tasks_to_exclude))
+        for task_id in tasks_to_exclude:
+            if not tasks_to_exclude or task_id in updated_tasks_to_date.keys():
+                updated_tasks_to_date.pop(task_id)
+
+        updated_tasks = self.todoist_api.get_tasks(ids=updated_tasks_to_date.keys())
+        # items.all(
+        #     lambda x: x['id'] in updated_tasks_to_date.keys() and (sync_completed or x['checked'] == 0))
+        _LOG.debug(f"Received {len(updated_tasks)} updated tasks")
+        return updated_tasks, updated_tasks_to_date
+
+    @staticmethod
+    def _send_sync_get(endpoint: str, **params) -> dict:
+        """Reuse sync api get request"""
+        url = f'{command_manager.BASE_URL}/{endpoint}'
+        command_manager._headers.update({'Authorization': f'Bearer {command_manager.settings.api_key}'})
+        with httpx.Client(headers=command_manager._headers) as client:
+            response = client.get(url=url, params=params)
+            response.raise_for_status()
+            return response.json()  # type: ignore
 
 
 def deep_get_task_prop(task_dict, keys, default=None):
