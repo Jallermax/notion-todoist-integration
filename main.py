@@ -1,12 +1,12 @@
 import logging
 
-from scenarios import Scenarios
+from todoist_sync_manager import TodoistSyncManager
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(funcName)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 logging.getLogger('urllib3').setLevel(logging.INFO)
 
 if __name__ == '__main__':
-    scenarios = Scenarios()
+    scenarios = TodoistSyncManager()
     print('Started scenarios...')
     # gather_metadata(todoist_api)
     scenarios.sync_created_tasks(all_tasks=True, sync_completed=False)  # One time migration of all tasks to Notion

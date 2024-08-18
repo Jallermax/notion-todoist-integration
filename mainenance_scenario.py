@@ -7,31 +7,35 @@ from todoist_api_python.api import TodoistAPI
 
 import notion
 import secrets
+import todoist_utils
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
+from notion_filters import Filter
+from todoist_sync_manager import TodoistSyncManager
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 
+scenarios = TodoistSyncManager()
 
 def sync_periodic_actions(todoist_id_text_prop='TodoistTaskId', on_hold_bool_prop="OnHold"):
     todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
+    todoist_fetcher = todoist_utils.TodoistFetcher()
 
     # 1.Get completed tasks from Todoist
-    completed_tasks = todoist_api.completed.get_all(project_id=secrets.MAINTENANCE_PROJECT_ID)['items']
-    by_task_id_filter = list(
-        {"property": todoist_id_text_prop, "text": {"equals": str(task['task_id'])}} for task in completed_tasks)
+    completed_tasks = todoist_api.get_completed_items(project_id=secrets.MAINTENANCE_PROJECT_ID).items
+    by_task_id_filter = list(Filter.RichText(todoist_id_text_prop).equals(task.id) for task in completed_tasks)
 
     # 2.Create history records in Notion for each completed task
-    query = {"filter": {"or": by_task_id_filter}}
+    query = Filter.Or(*by_task_id_filter)
     completed_actions = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, query, log_to_file=True)
 
     history_records_ids = []
     for action in completed_actions:
         completed_task = list(filter(
-            lambda ct: str(ct['task_id']) == PParser.rich_text(action, todoist_id_text_prop), completed_tasks))[0]
-        detailed_task = todoist_api.items.get_by_id(completed_task['task_id'])
-        append_comments_to_tasks([detailed_task])
+            lambda ct: ct.id == PParser.rich_text(action, todoist_id_text_prop), completed_tasks))[0]
+        detailed_task = todoist_api.get_task(completed_task.id)  # Get detailed task with completed date from events
+        todoist_fetcher.append_comments([todoist_utils.TodoistTask(task=detailed_task)])
         success, page = create_history_entry(action['id'], detailed_task)
         if success:
             history_records_ids.append(page['id'])
@@ -40,12 +44,10 @@ def sync_periodic_actions(todoist_id_text_prop='TodoistTaskId', on_hold_bool_pro
             _LOG.error(f"Error creating history record from {detailed_task=}")
 
     # 3.Gather notion maintenance actions [without TodoistTaskId and not OnHold] or [completed from previous step]
-    empty_task_id_filter = {"property": todoist_id_text_prop, "text": {"is_empty": True}}
-    not_on_hold_filter = {"property": on_hold_bool_prop, "checkbox": {"equals": False}}
-    completed_actions_filter = list(
-        {"property": "History records", "relation": {"contains": page_id}} for page_id in history_records_ids)
-    no_tasks_query = {
-        "filter": {"or": [{"and": [empty_task_id_filter, not_on_hold_filter]}, *completed_actions_filter]}}
+    empty_task_id_filter = Filter.RichText(todoist_id_text_prop).is_empty()
+    not_on_hold_filter = Filter.Checkbox(on_hold_bool_prop).equals(False)
+    completed_actions_filter = [Filter.Relation('History records').contains(page_id) for page_id in history_records_ids]
+    no_tasks_query = Filter.Or(Filter.And(empty_task_id_filter, not_on_hold_filter), *completed_actions_filter)
     actions_to_update = notion.read_database(secrets.MAINTENANCE_DATABASE_ID, no_tasks_query, True)
 
     # 4.Create task in Todoist for each maintenance action without active link to by task_id

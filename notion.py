@@ -7,6 +7,7 @@ import pytz
 import requests
 
 import secrets
+from notion_filters import Filter
 from todoist_utils import TodoistTask
 
 _LOG = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import reduce, lru_cache
-from typing import Literal
+from typing import Literal, Any
 
 import httpx
 import pytz
@@ -102,7 +102,7 @@ class TodoistToNotionMapper:
 
     def map_property(self, task: TodoistTask, prop_name: str, db_metadata: dict, notion_props: dict = None,
                      child_blocks: list = None,
-                     convert_md_links=False) -> tuple[dict | None, list | None]:
+                     convert_md_links=False) -> tuple[dict[str, Any], list[dict]]:
         if isinstance(notion_props, type(None)):
             notion_props = {}
         if isinstance(child_blocks, type(None)):
@@ -116,14 +116,15 @@ class TodoistToNotionMapper:
         return notion_props, child_blocks
 
     def parse_prop(self, task: TodoistTask, prop_key: str,
-                   db_metadata: dict, convert_md_links: bool) -> tuple[dict | None, list | None]:
+                   db_metadata: dict, convert_md_links: bool) -> tuple[dict[str, Any] | None, list[dict] | None]:
         if not task or not (todoist_val := deep_get_task_prop(task.task.to_dict(), prop_key)):
             return None, None
 
         value_list = todoist_val if isinstance(todoist_val, list) else [todoist_val]
         return self.parse_prop_list(value_list, prop_key, db_metadata, convert_md_links)
 
-    def parse_prop_list(self, todoist_val_list, prop_key, db_metadata, convert_md_links) -> tuple[dict, list]:
+    def parse_prop_list(self, todoist_val_list, prop_key, db_metadata, convert_md_links
+                        ) -> tuple[dict[str, Any], list[dict]]:
         props = self.parse_prop_list_to_dict(todoist_val_list, prop_key, db_metadata, convert_md_links)
 
         listed_props = {}
@@ -235,6 +236,25 @@ class TodoistToNotionMapper:
 
             current_prop_raw_values.append(todoist_val)
         return props
+
+    def map_todoist_to_notion_task(self, task: TodoistTask, notion_db_metadata: dict[str, Any], parent_property: str
+                                   ) -> tuple[dict[str, Any], list[dict]]:
+        notion_props, child_blocks = {}, []
+        # Map task properties to Notion properties or child blocks
+        for prop in self.mappings.keys():
+            self.map_property(task, prop, notion_db_metadata, notion_props, child_blocks, convert_md_links=True)
+        # Map task comments to Notion properties or child blocks
+        if task.comments:
+            props, blocks = self.parse_prop_list([comment.content for comment in task.comments],
+                                                                'comments', notion_db_metadata, True)
+            notion_props.update(props)
+            child_blocks.extend(blocks)
+        # Add parent page relation
+        # TODO Extract to separate step after task sync to ensure all parent already created in Notion
+        parent_page_id = self.extract_parent_notion_uuid(task)
+        if parent_page_id:
+            notion_props.update({parent_property: PFormat.single_relation(parent_page_id)})
+        return notion_props, child_blocks
 
     def update_properties(self, notion_task, todoist_task, prop_keys_to_update, db_metadata):
         props_to_upd = {}
@@ -387,6 +407,14 @@ class TodoistFetcher:
         #     lambda x: x['id'] in updated_tasks_to_date.keys() and (sync_completed or x['checked'] == 0))
         _LOG.debug(f"Received {len(updated_tasks)} updated tasks")
         return updated_tasks, updated_tasks_to_date
+
+    def append_comments(self, tasks: list[TodoistTask]):
+        """Append comments to tasks."""
+        for task in [task for task in tasks if task.task.comment_count > 0]:
+            try:
+                task.comments = self.todoist_api.get_comments(task_id=task.task.id)
+            except Exception as e:
+                _LOG.error(f"Failed to fetch comments for task {task.task.id}: {e}")
 
     @staticmethod
     def _send_sync_get(endpoint: str, **params) -> dict:
