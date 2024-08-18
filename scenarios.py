@@ -8,6 +8,7 @@ import secrets
 import todoist_utils
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
+from notion_filters import Filter
 from todoist_utils import TodoistTask
 
 TODOIST_ID_PROP = 'TodoistTaskId'
@@ -115,20 +116,15 @@ class Scenarios:
                            last_synced_date_prop=SYNCED_TIME_PROPERTY_NAME):
         # get relevant prop updates mappings
         updated_tasks, updated_events = self.todoist_fetcher.get_updated_tasks(sync_created, sync_completed)
+        updated_tasks = [TodoistTask(task=task) for task in updated_tasks]
         self.append_comments_to_tasks(updated_tasks)
 
-        entries_to_update = []
-        for upd_tasks_chunk in chunks(updated_tasks, 100):
-            by_task_id_and_after_sync_filter = [
-                {"and": [{"property": todoist_id_text_prop, "rich_text": {"equals": str(upd_id['id'])}},
-                         {"property": last_synced_date_prop,
-                          "date": {"on_or_before": updated_events[upd_id['id']]}}]} for upd_id in upd_tasks_chunk]
-            query = {"filter": {"or": by_task_id_and_after_sync_filter}}
-            entries_to_update.extend(notion.read_database(self.tasks_db_id, query))
-            # Filter notion entries by date and time since api call filters only by date ignoring time
-            entries_to_update = [e for e in entries_to_update if
-                                 PParser.date(e, last_synced_date_prop) < updated_events[
-                                     int(PParser.rich_text(e, todoist_id_text_prop))]]
+        entries_to_update = notion.get_notion_tasks_before_time(self.tasks_db_id, todoist_id_text_prop,
+                                                                last_synced_date_prop, updated_tasks, updated_events)
+        # Filter notion entries by date and time since api call filters only by date ignoring time
+        entries_to_update = [e for e in entries_to_update if
+                             PParser.date(e, last_synced_date_prop) < updated_events[
+                                 PParser.rich_text(e, todoist_id_text_prop)]]
 
         metadata = notion.read_database_metadata(self.tasks_db_id)['properties']
         for entry in entries_to_update:
@@ -165,9 +161,8 @@ class Scenarios:
         if not events:
             return []
         deleted_tasks_id = [str(x['object_id']) for x in events]
-        by_deleted_id_filter = [{"property": todoist_id_text_prop, "rich_text": {"equals": del_id}} for del_id in
-                                deleted_tasks_id]
-        query = {"filter": {"or": by_deleted_id_filter}}
+        by_deleted_id_filter = [Filter.RichText(todoist_id_text_prop).equals(del_id) for del_id in deleted_tasks_id]
+        query = Filter.Or(*by_deleted_id_filter)
         entries_to_delete = notion.read_database(self.tasks_db_id, query)
         return entries_to_delete
 
@@ -178,8 +173,3 @@ def update_task_id(page_id, task_id):
     if not success:
         _LOG.error(f"Error adding TodoistTaskId={task_id} to notion task '{page['url']}'")
 
-
-def chunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]

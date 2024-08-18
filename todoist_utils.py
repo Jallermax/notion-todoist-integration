@@ -359,7 +359,8 @@ class TodoistFetcher:
 
         return all_tasks
 
-    def get_updated_tasks(self, sync_created: bool = True, sync_completed: bool = True) -> tuple[list, dict]:
+    def get_updated_tasks(self, sync_created: bool = True, sync_completed: bool = True
+                          ) -> tuple[list[Task], dict[str, str]]:
         """
         @return: tuple of updated tasks and dict of task_id: event_date
         """

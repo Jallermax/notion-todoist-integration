@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import json
 import logging
 from functools import reduce
@@ -7,6 +7,7 @@ import pytz
 import requests
 
 import secrets
+from todoist_utils import TodoistTask
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
@@ -62,9 +63,35 @@ def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True
     return data
 
 
+def get_synced_notion_tasks(database_id: str, todoist_id_prop: str) -> list[dict]:
     """Fetch tasks already linked in Notion"""
-    query = {"filter": {"property": todoist_id_prop, "rich_text": {"is_not_empty": True}}}
+    query = Filter.RichText(todoist_id_prop).is_not_empty()
     return read_database(database_id, query)
+
+def get_notion_tasks_before_time(db_id: str, todoist_id_text_prop: str, last_synced_date_prop: str,
+                                 updated_tasks: list[TodoistTask], updated_events: dict[str, str]) -> list[dict]:
+    entries_to_update = []
+    for upd_tasks_chunk in chunks(updated_tasks, 100):
+        by_task_id_and_after_sync_filter = [Filter.And(
+            Filter.RichText(todoist_id_text_prop).equals(upd_id.task.id),
+            Filter.Date(last_synced_date_prop).on_or_before(updated_events[upd_id.task.id])
+        ) for upd_id in upd_tasks_chunk]
+        query = Filter.Or(*by_task_id_and_after_sync_filter)
+        entries_to_update.extend(read_database(db_id, query))
+    return entries_to_update
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+def fetch_task_by_todoist_id(database_id: str, todoist_id_prop: str, todoist_id: str) -> dict | None:
+    """Fetch a single Notion task by Todoist Task ID."""
+    query = Filter.RichText(todoist_id_prop).equals(todoist_id)
+    tasks = read_database(database_id, query)
+    return tasks[0] if tasks else None
 
 
 def create_page(parent_id, *args, **kwargs):
@@ -134,9 +161,9 @@ class PropertyFormatter:
             return {"date": None} if property_obj else PropertyFormatter.text('')
         if localize:
             if len(value) == 20:
-                value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
+                value = LOCAL_TIMEZONE.localize(datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")).isoformat()
             elif len(value) == 19:
-                value = LOCAL_TIMEZONE.localize(datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")).isoformat()
+                value = LOCAL_TIMEZONE.localize(datetime.strptime(value, "%Y-%m-%dT%H:%M:%S")).isoformat()
         return {"date": {"start": value}} if property_obj else PropertyFormatter.text(value)
 
     @staticmethod
