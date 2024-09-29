@@ -28,6 +28,19 @@ NOTION_URL_PATTERN = re.compile("\\[.+]\\("
                                 "([a-zA-Z0-9-]+-)?"  # Page name
                                 "([a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12})"  # UUID
                                 "(\\?[a-zA-Z0-9%=\\-&]*)?\\)")
+NOTION_LINK_PATTERN = re.compile(
+    "(https://www.notion.so)?/"  # Optional Notion host
+    "([a-zA-Z0-9-]+/)?"  # Optional Username
+    "([a-zA-Z0-9-]+-)?"  # Optional Page name
+    "([a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12})"  # UUID
+    "(\\?[a-zA-Z0-9%=\\-&]*)?"  # Optional Query parameters
+)
+NOTION_MARKDOWN_LINK_PATTERN = re.compile(
+    "\\[(.+?)]\\((" + NOTION_LINK_PATTERN.pattern + ")\\)"
+)
+NOTION_SHORTHAND_LINK_PATTERN = re.compile(
+    "\\[Notion]\\((" + NOTION_LINK_PATTERN.pattern + ")\\)"
+)
 
 
 class NoneStrategy(Enum):
@@ -90,14 +103,14 @@ class TodoistToNotionMapper:
 
         return tag_mapping
 
-    def extract_parent_notion_uuid(self, task: TodoistTask):
+    def extract_parent_notion_uuid(self, task: TodoistTask) -> str | None:
         parent_id = task.task.parent_id
         if not parent_id:
             return None
         parent_task = self.todoist_api.get_task(parent_id)
-        match = re.match(NOTION_URL_PATTERN, parent_task.description)
+        match = re.match(NOTION_MARKDOWN_LINK_PATTERN, parent_task.description)
         if match:
-            return match.group(4)
+            return match.group(6)
         return None
 
     def map_property(self, task: TodoistTask, prop_name: str, db_metadata: dict, notion_props: dict = None,
@@ -246,7 +259,7 @@ class TodoistToNotionMapper:
         # Map task comments to Notion properties or child blocks
         if task.comments:
             props, blocks = self.parse_prop_list([comment.content for comment in task.comments],
-                                                                'comments', notion_db_metadata, True)
+                                                 'comments', notion_db_metadata, True)
             notion_props.update(props)
             child_blocks.extend(blocks)
         # Add parent page relation

@@ -63,7 +63,7 @@ class TodoistSyncManager:
         print(f"id: {master_tasks_db_metadata['id']}; name: {master_tasks_db_metadata['title'][0]['plain_text']};\n"
               f"properties: {p_dict}")
 
-    def sync_created_tasks(self, all_tasks=False, sync_completed=False):
+    def sync_created_tasks(self, all_tasks=False, sync_completed=False, overwrite_existing_backlinks=False):
 
         # 1.Get tasks with notes from Todoist
         all_tasks = self.todoist_fetcher.todoist_api.get_tasks() if all_tasks \
@@ -83,9 +83,9 @@ class TodoistSyncManager:
         for task in [task for task in tasks if task.task.id not in linked_task_ids]:
             self.create_notion_task(task)
             # 4. Update Todoist task with Notion page reference
-            self._update_todoist_task_with_notion_link(task)
+            self._update_todoist_task_with_notion_link(task, overwrite_existing=overwrite_existing_backlinks)
 
-    def _update_todoist_task_with_notion_link(self, task: TodoistTask) -> None:
+    def _update_todoist_task_with_notion_link(self, task: TodoistTask, overwrite_existing: bool = False) -> None:
         if not task.notion_url:
             _LOG.warning(f"Task '{task.task.content}' has no Notion page reference")
             return
@@ -94,6 +94,8 @@ class TodoistSyncManager:
         if not task_description:
             task_description = notion_reference
         elif notion_reference not in task_description:
+            if overwrite_existing:
+                task_description = re.sub(todoist_utils.NOTION_SHORTHAND_LINK_PATTERN, "", task_description).strip()
             task_description = f"{notion_reference}\n{task_description}"
         self.todoist_fetcher.todoist_api.update_task(task.task.id, description=task_description)
 
