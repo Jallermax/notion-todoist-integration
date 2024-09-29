@@ -36,6 +36,13 @@ NOTION_SHORTHAND_LINK_PATTERN = re.compile(
     "\\[Notion]\\((" + NOTION_LINK_PATTERN.pattern + ")\\)"
 )
 
+ObjectType = Literal['item', 'project', 'note']
+EventType = Literal['added', 'updated', 'deleted', 'completed', 'uncompleted']
+ObjectEventType = Literal[
+    'item:added', 'item:updated', 'item:deleted', 'item:completed', 'item:uncompleted',
+    'project:added', 'project:updated', 'project:deleted', 'project:archived', 'project:unarchived',
+    'note:added', 'note:updated', 'note:deleted']
+
 
 class NoneStrategy(Enum):
     IGNORE = 'ignore'  # Ignore property value if it is not mapped
@@ -325,16 +332,18 @@ class TodoistFetcher:
         return all_items
 
     def get_events(self, limit=10000, batch_size=100,
-                   event_type: Literal['added', 'updated', 'deleted', 'completed', 'uncompleted'] = None,
-                   object_type: Literal['item', 'project', 'note'] = None) -> list[dict]:
+                   event_type: EventType = None,
+                   object_type: ObjectType = None,
+                   object_event_types: list[ObjectEventType] = None) -> list[dict]:
         """
         For todoist_api doc possible kwargs see https://developer.todoist.com/sync/v9/#get-activity-logs
-        :param limit: limit of all collected events available from Todoist.
-        :param batch_size: batch size for activities in one request.
-        :param event_type: filter events by type (e.g. 'added', 'updated', 'deleted', 'completed',
-        'uncompleted', 'archived', 'unarchived', 'shared', 'left').
-        :param object_type: filter events by object type (e.g. 'item', 'project', 'note'),
-        :return: event objects (see https://developer.todoist.com/sync/v9/#activity).
+        @param limit: limit of all collected events available from Todoist.
+        @param batch_size: batch size for activities in one request.
+        @param event_type: filter events by type (e.g. 'added', 'updated', 'deleted', 'completed').
+        @param object_type: filter events by object type (e.g. 'item', 'project', 'note'),
+        @param object_event_types: list of strings of the form [object_type]:[event_type].
+            When this parameter is specified the object_type and event_type parameters are ignored.
+        @return: event objects (see https://developer.todoist.com/sync/v9/#activity).
         """
         if 0 > batch_size > 100:
             _LOG.warning(f"{batch_size=}, but value must be between 1 and 100. Setting value to 100")
@@ -348,6 +357,8 @@ class TodoistFetcher:
             params['event_type'] = event_type
         if object_type:
             params['object_type'] = object_type
+        if object_event_types:
+            params['object_event_types'] = object_event_types
         while len(events) < count:
             result = self._send_sync_get('activity/get', **params)
             events.extend(result['events'])
