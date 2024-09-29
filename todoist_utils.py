@@ -305,7 +305,11 @@ class TodoistFetcher:
         self.sync_api = SyncTodoistAPI(api_key=secrets.TODOIST_TOKEN)
         self.sync_api.sync(True)
 
-    def get_completed_tasks(self, since: str = None, limit: int = 500, batch_size: int = 100) -> list[dict]:
+    def get_completed_tasks(self, since: datetime = None, exclude_ids: list[str] = None) -> list[Task]:
+        completed_tasks = self._get_completed_tasks(since=since.isoformat() if since else None)
+        return [Task.from_dict(task) for task in completed_tasks if not exclude_ids or task['id'] not in exclude_ids]
+
+    def _get_completed_tasks(self, since: str = None, limit: int = 500, batch_size: int = 100) -> list[dict]:
         """@since: datetime string in '2024-1-15T10:13:00' format"""
         self.sync_api.sync()
         params = {'limit': batch_size, 'offset': 0}
@@ -352,30 +356,29 @@ class TodoistFetcher:
             params['offset'] += batch_size
         return events
 
-    def extract_parent_notion_uuid(self, task: TodoistTask) -> str | None:
-        parent_id = task.task.parent_id
-        if not parent_id:
-            return None
-        parent_task = self.todoist_api.get_task(parent_id)
-        match = re.match(NOTION_URL_PATTERN, parent_task.description)
-        if match:
-            return match.group(4)
-        return None
+    def get_all_tasks(self, get_completed: bool = False) -> list[Task]:
+        active_tasks = self.todoist_api.get_tasks()
 
-    def get_recently_added_tasks(self, days_old=None, get_completed=True) -> list[Task]:
+        if get_completed:
+            completed = self.get_completed_tasks(exclude_ids=[task.id for task in active_tasks])
+            active_tasks.extend(completed)
+
+        return active_tasks
+
+    def get_recently_added_tasks(self, since_date: datetime = None, days_old: int = None, get_completed: bool = True
+                                 ) -> list[Task]:
         events: list[dict] = self.get_events(object_type='item', event_type='added')
-        since_date: datetime | None = datetime.now(LOCAL_TIMEZONE) - timedelta(days=days_old) if days_old else None
-        created_tasks: list[str] = list(x['object_id'] for x in events if not days_old
+        since_date = datetime.now(LOCAL_TIMEZONE) - timedelta(days=days_old) if not since_date and days_old else None
+        created_tasks: list[str] = list(x['object_id'] for x in events if not since_date
                                         or datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ")
                                         > since_date)
         _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
             f" for the last {days_old} days" if days_old else ""))
+
         all_tasks = self.todoist_api.get_tasks(ids=created_tasks)
         if get_completed:
-            completed_tasks = self.get_completed_tasks(
-                since=since_date.isoformat() if since_date else None)
-            all_tasks_ids = [task.id for task in all_tasks]
-            all_tasks.extend([Task.from_dict(task) for task in completed_tasks if task['id'] not in all_tasks_ids])
+            completed_tasks = self.get_completed_tasks(since=since_date, exclude_ids=[task.id for task in all_tasks])
+            all_tasks.extend(completed_tasks)
 
         return all_tasks
 
