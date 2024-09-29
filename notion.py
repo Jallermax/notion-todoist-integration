@@ -8,7 +8,7 @@ import requests
 
 import secrets
 from notion_filters import Filter
-from todoist_utils import TodoistTask
+from models import TodoistTask
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)

@@ -8,6 +8,7 @@ from todoist_api_python.api import TodoistAPI
 import notion
 import secrets
 import todoist_utils
+from models import TodoistTask
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
 from notion_filters import Filter
@@ -35,7 +36,7 @@ def sync_periodic_actions(todoist_id_text_prop='TodoistTaskId', on_hold_bool_pro
         completed_task = list(filter(
             lambda ct: ct.id == PParser.rich_text(action, todoist_id_text_prop), completed_tasks))[0]
         detailed_task = todoist_api.get_task(completed_task.id)  # Get detailed task with completed date from events
-        todoist_fetcher.append_comments([todoist_utils.TodoistTask(task=detailed_task)])
+        todoist_fetcher.append_comments([TodoistTask(task=detailed_task)])
         success, page = create_history_entry(action['id'], detailed_task)
         if success:
             history_records_ids.append(page['id'])

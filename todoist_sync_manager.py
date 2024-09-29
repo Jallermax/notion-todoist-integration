@@ -10,7 +10,7 @@ import todoist_utils
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
 from notion_filters import Filter
-from todoist_utils import TodoistTask
+from models import TodoistTask
 
 TODOIST_ID_PROP = 'TodoistTaskId'
 SYNCED_TIME_PROPERTY_NAME = 'Synced'

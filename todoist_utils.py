@@ -1,7 +1,6 @@
 import ast
 import logging
 import re
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import reduce, lru_cache
@@ -12,7 +11,8 @@ import pytz
 from todoist_api_python.api import TodoistAPI
 from synctodoist import TodoistAPI as SyncTodoistAPI
 from synctodoist.managers import command_manager
-from todoist_api_python.models import (Task, Comment)
+from todoist_api_python.models import Task
+from models import TodoistTask
 
 import notion
 import secrets
@@ -22,12 +22,6 @@ from notion import PropertyParser as PParser
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
 MD_LINK_PATTERN = re.compile(r"\[([^]]*)]\((https?://[^\s)]+)\)|(https?://[^\s)]+)")
-NOTION_URL_PATTERN = re.compile("\\[.+]\\("
-                                "(https://www.notion.so)?"  # Notion host
-                                "/([a-zA-Z0-9-]+/)?"  # Username
-                                "([a-zA-Z0-9-]+-)?"  # Page name
-                                "([a-f0-9]{8}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{4}-?[a-f0-9]{12})"  # UUID
-                                "(\\?[a-zA-Z0-9%=\\-&]*)?\\)")
 NOTION_LINK_PATTERN = re.compile(
     "(https://www.notion.so)?/"  # Optional Notion host
     "([a-zA-Z0-9-]+/)?"  # Optional Username
@@ -47,13 +41,6 @@ class NoneStrategy(Enum):
     IGNORE = 'ignore'  # Ignore property value if it is not mapped
     VALUE_AS_IS = 'value-as-is'
     MAP_BY_NAME = 'map-by-name'  # Map property values (labels) to relations by identical name
-
-
-@dataclass
-class TodoistTask:
-    task: Task
-    comments: list[Comment] = field(default_factory=list)
-    notion_url: str | None = None
 
 
 @lru_cache
