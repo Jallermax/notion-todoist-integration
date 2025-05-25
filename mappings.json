@@ -39,12 +39,12 @@
     "values": {
       "ML_prjt": {
         "name": "Projects",
-        "value": "3142b10bfeac4b669a24d4603efb2f3a",
+        "value": "73c69a282dff45e5a2840b7bdaa49518",
         "comment": "ML career path"
       },
       "💵finances": {
         "name": "Outcomes",
-        "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
+        "value": "bc8cbd959db24dbeacbe597ac5fb1440",
         "comment": "finances"
       },
       "_-5mins": {
@@ -97,62 +97,62 @@
       "type": "relation"
     },
     "values": {
-      "2219986415": {
-        "value": "3142b10bfeac4b669a24d4603efb2f3a",
+      "6CrfgrrqJPcqjp8g": {
+        "value": "73c69a282dff45e5a2840b7bdaa49518",
         "comment": "DS career -> ML career path"
       },
-      "2269468283": {
-        "value": "8fb8ad5d5a9a4e61b27d0ad19bd525c7",
+      "6Fhmv82V287fx2HV": {
+        "value": "1c52d153b43b4a49b93c317432cf2aaa",
         "comment": "Assessment preparation -> Prepare for an interview (Assessment)"
       },
-      "1771235159": {
-        "value": "ca2f15da2b6b417fadb2192b54728795",
+      "6CrfgrrqCcqQVGFp": {
+        "value": "852817e128d848aca532ce076ae60152",
         "comment": "Personal->Personal"
       },
-      "1782707736": {
-        "value": "cbf9670d61a142149448db6249718268",
+      "6CrfgrrqHhPRfqGp": {
+        "value": "43a0e724c44c49b1a7ed82307ca9cc06",
         "comment": "Pet_projects"
       },
-      "1771235160": {
-        "value": "8fad26664a334af99ee21fdfbde34f80",
+      "6CrfgrrqCq9Fjqpw": {
+        "value": "960bf0ca25bd4eecb730a41c239fe21c",
         "comment": "Shopping -> Shopping List temp"
       },
-      "2253243496": {
-        "value": "fda49e0655d34b8faa5e296891cc4744",
+      "6CrfgrrqJpx9MqMq": {
+        "value": "a392c0f5c35f40e5a8f367aeb6d96f28",
         "comment": "Periodical actions -> Periodic Maintenances"
       },
-      "2269312293": {
-        "value": "ac0eedc1713d4fd4a40fffe073c18e74",
+      "6FhG939F8rC9373r": {
+        "value": "ab43d8a3814d4de9a41d6eb1110dcd13",
         "comment": "Notion system organization _Second Brain_ ->"
       },
-      "2269468150": {
-        "value": "659bfa23d58043b8a3fe101bae68f843",
+      "6FhmrrVxPqMjPq9p": {
+        "value": "c418c4563adc4ee2ae59e23a31aef59c",
         "comment": "Set-up HA automation"
       },
-      "2269468198": {
-        "value": "6f34e3c22261486dbe28c276949f8fd6",
+      "6Fhmv27chFRFcjWQ": {
+        "value": "7aa9dfe342484c6ea304dced2e8b078a",
         "comment": "Personal InfoSec -> Achieve personal Information Security"
       },
-      "2269468239": {
-        "value": "520d1f1c7627420cb1ab596ace592c88",
+      "6Fhmv4rVWC4X4vFV": {
+        "value": "a85287090830431395e64eeabf26acfd",
         "comment": "Gain control of own health"
       },
-      "2269468332": {
-        "value": "0fb1f1495f8048a9a4adf6de8b7adaf5",
+      "6FhmvJvJP9v8rr9H": {
+        "value": "bc8cbd959db24dbeacbe597ac5fb1440",
         "name": "Outcomes",
         "type": "relation",
         "comment": "Financial Wellness Outcome"
       },
-      "2267650566": {
-        "value": "5417565d11fd43ea88d397e56f95b319",
+      "6FV6QrqqJcPv6qGH": {
+        "value": "231ae48b2c454449a3f5221f8b3c583f",
         "comment": "Knowledge Nexus GraphRAG [Notion](https://www.notion.so/jallermax/5417565d11fd43ea88d397e56f95b319)"
       },
-      "2269468259": {
-        "value": "24c7b6de7528429ea89d669477a3c236",
+      "6Fhmv68PRx3GXf8F": {
+        "value": "c540dea82b1b48d2b63f1a8c3c8bfdf9",
         "comment": "AI Ambassador initiative -> AI Ambassador (Prompt library)"
       },
-      "1771235158": {
-        "value": "ad7fbb3d9e604ca998a76215bad64e5b",
+      "6CrfgrrqCGGRH45V": {
+        "value": "019e632f2a424afba44aa5d306f988b2",
         "comment": "Inbox"
       }
     }

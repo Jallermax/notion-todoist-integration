@@ -9,7 +9,7 @@ if __name__ == '__main__':
     scenarios = TodoistSyncManager()
     print('Started scenarios...')
     # gather_metadata(todoist_api)
-    scenarios.sync_created_tasks(all_tasks=True, sync_completed=False)  # One time migration of all tasks to Notion
+    scenarios.sync_created_tasks(all_tasks=True, sync_completed=False, overwrite_existing_backlinks=True)  # One time migration of all tasks to Notion
     # while True:
     #     scenarios.sync_deleted_tasks()
     #     scenarios.sync_updated_tasks()

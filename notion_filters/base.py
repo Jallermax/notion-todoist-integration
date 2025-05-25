@@ -9,23 +9,25 @@ class FilterBase(ABC):
         self.condition = {}
 
     def __str__(self) -> str:
-        return str(self.to_dict())
+        return json.dumps(self.to_dict())
+
+    def __dict__(self) -> dict[str, Any]:
+        return self.to_dict()
 
     def __repr__(self) -> str:
         return (f"{self.__class__.__name__}(property_name={self.property_name},"
                 f" property_type={self._get_property_type()}, condition={self.condition})")
 
-    def to_dict(self, pretty=False) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the FilterBase to a dictionary format required by the Notion API.
         """
-        condition = {
+        return {
             "filter": {
                 "property": self.property_name,
                 self._get_property_type(): self.condition
             }
         }
-        return json.dumps(condition, indent=2) if pretty else condition
 
     @abstractmethod
     def _get_property_type(self) -> str:
@@ -56,12 +58,11 @@ class AndFilter:
 
         :return: A dictionary representing the AND filter.
         """
-        condition = {
+        return {
             "filter": {
                 "and": [filter_.to_dict()["filter"] for filter_ in self.filters]
             }
         }
-        return json.dumps(condition, indent=2) if pretty else condition
 
 
 class OrFilter:
@@ -85,9 +86,8 @@ class OrFilter:
 
         :return: A dictionary representing the OR filter.
         """
-        condition = {
+        return {
             "filter": {
                 "or": [filter_.to_dict()["filter"] for filter_ in self.filters]
             }
         }
-        return json.dumps(condition, indent=2) if pretty else condition

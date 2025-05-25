@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from functools import reduce, lru_cache
 from typing import Literal, Any
+from tqdm import tqdm
 
 import httpx
 import pytz
@@ -89,7 +90,7 @@ class TodoistToNotionMapper:
         Creates an id mapping between 'Todoist Tags' property in Notion Master Tag DB and Todoist Labels by name.
         :return: dict(todoist_label_id: notion_tag_page_id)
         """
-        labels = {label.name: label.id for label in self.todoist_api.get_labels()}
+        labels = {label.name: label.id for page in self.todoist_api.get_labels() for label in page}
         notion_master_tags = n_tags if n_tags else notion.read_database(secrets.MASTER_TAG_DB)
         notion_tags = {tag: page['id'] for page in notion_master_tags if
                        (tag := PParser.rich_text(page, todoist_tags_text_prop))}
@@ -367,7 +368,7 @@ class TodoistFetcher:
         return events
 
     def get_all_tasks(self, get_completed: bool = False) -> list[Task]:
-        active_tasks = self.todoist_api.get_tasks()
+        active_tasks = [task for page in self.todoist_api.get_tasks() for task in page]
 
         if get_completed:
             completed = self.get_completed_tasks(exclude_ids=[task.id for task in active_tasks])
@@ -385,7 +386,7 @@ class TodoistFetcher:
         _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
             f" for the last {days_old} days" if days_old else ""))
 
-        all_tasks = self.todoist_api.get_tasks(ids=created_tasks)
+        all_tasks = [task for page in self.todoist_api.get_tasks(ids=created_tasks) for task in page]
         if get_completed:
             completed_tasks = self.get_completed_tasks(since=since_date, exclude_ids=[task.id for task in all_tasks])
             all_tasks.extend(completed_tasks)
@@ -415,7 +416,7 @@ class TodoistFetcher:
             if not tasks_to_exclude or task_id in updated_tasks_to_date.keys():
                 updated_tasks_to_date.pop(task_id)
 
-        updated_tasks = self.todoist_api.get_tasks(ids=updated_tasks_to_date.keys())
+        updated_tasks = [task for page in self.todoist_api.get_tasks(ids=list(updated_tasks_to_date.keys())) for task in page]
         # items.all(
         #     lambda x: x['id'] in updated_tasks_to_date.keys() and (sync_completed or x['checked'] == 0))
         _LOG.debug(f"Received {len(updated_tasks)} updated tasks")
@@ -423,9 +424,10 @@ class TodoistFetcher:
 
     def append_comments(self, tasks: list[TodoistTask]):
         """Append comments to tasks."""
-        for task in [task for task in tasks if task.task.comment_count > 0]:
+        # for task in [task for task in tasks if task.task.comment_count > 0]:
+        for task in tqdm(tasks, desc="Fetching comments", unit="task"):
             try:
-                task.comments = self.todoist_api.get_comments(task_id=task.task.id)
+                task.comments = [comment for page in self.todoist_api.get_comments(task_id=task.task.id) for comment in page]
             except Exception as e:
                 _LOG.error(f"Failed to fetch comments for task {task.task.id}: {e}")
 

@@ -49,10 +49,10 @@ class TodoistSyncManager:
     def gather_metadata(self):
         # Todoist
         print("Todoist Projects:")
-        for prj in self.todoist_fetcher.todoist_api.get_projects():
+        for prj in [prj for page in self.todoist_fetcher.todoist_api.get_projects() for prj in page]:
             print(f"name: {prj.name}; id: {prj.id}")
         print("Todoist Labels:")
-        for label in self.todoist_fetcher.todoist_api.get_labels():
+        for label in [l for page in self.todoist_fetcher.todoist_api.get_labels() for l in page]:
             print(f"name: {label.name}; id: {label.id}")
 
         # Notion
@@ -68,19 +68,25 @@ class TodoistSyncManager:
     def sync_created_tasks(self, all_tasks=False, sync_completed=False, overwrite_existing_backlinks=False):
 
         # 1.Get tasks with notes from Todoist
-        all_tasks = self.todoist_fetcher.todoist_api.get_tasks() if all_tasks \
+        _LOG.info("Fetching tasks from Todoist...")
+        all_tasks = [task for page in self.todoist_fetcher.todoist_api.get_tasks() for task in page] if all_tasks \
             else self.todoist_fetcher.get_recently_added_tasks(get_completed=sync_completed)
+        _LOG.info(f"Fetched {len(all_tasks)} tasks from Todoist.")
 
         tasks: list[TodoistTask] = [TodoistTask(task=task) for task in all_tasks]
         tasks = sort_tasks_by_hierarchy(tasks)
 
+        _LOG.info(f"Fetching task comments from Todoist...")
         self.todoist_fetcher.append_comments(tasks)
 
         # 2. Get already synced notion tasks not to create dupes
+        _LOG.info("Fetching synced tasks from Notion...")
         notion_tasks = notion.get_synced_notion_tasks(self.tasks_db_id, TODOIST_ID_PROP)
         linked_task_ids = list(PParser.rich_text(notion_task, TODOIST_ID_PROP) for notion_task in notion_tasks)
+        _LOG.info(f"Found {len(notion_tasks)} synced tasks in Notion.")
 
         # 3. Create not yet linked actions/tasks in Notion
+        _LOG.info("Creating new Notion tasks for unlinked Todoist tasks...")
         for task in [task for task in tasks if task.task.id not in linked_task_ids]:
             self.create_notion_task(task)
             # 4. Update Todoist task with Notion page reference

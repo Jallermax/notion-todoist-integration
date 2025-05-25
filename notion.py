@@ -9,6 +9,7 @@ import requests
 import secrets
 from notion_filters import Filter
 from models import TodoistTask
+from notion_filters.base import FilterBase
 
 _LOG = logging.getLogger(__name__)
 LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
@@ -39,14 +40,14 @@ def read_databases_list(**kwargs):
 
 def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True) -> list[dict]:
     data = []
-    query = raw_query
+    query = raw_query.__dict__() if isinstance(raw_query, FilterBase) else raw_query
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
     has_more = True
     while has_more:
         if not query:
             res = requests.post(url, headers=headers)
         else:
-            res = requests.post(url, headers=headers, json=query)
+            res = requests.post(url, headers=headers, data=json.dumps(query))
         if not process_response(res):
             return data
         data.extend(res.json()['results'])
