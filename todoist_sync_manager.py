@@ -1,5 +1,6 @@
 import logging
 import re
+from collections import defaultdict, deque
 from datetime import datetime
 
 import pytz
@@ -71,8 +72,7 @@ class TodoistSyncManager:
             else self.todoist_fetcher.get_recently_added_tasks(get_completed=sync_completed)
 
         tasks: list[TodoistTask] = [TodoistTask(task=task) for task in all_tasks]
-        # Sorting the list in place: Tasks with None parent_id come first to ensure parent linking
-        tasks.sort(key=lambda x: (x.task.parent_id is not None, x.task.parent_id))
+        tasks = sort_tasks_by_hierarchy(tasks)
 
         self.todoist_fetcher.append_comments(tasks)
 
@@ -160,3 +160,48 @@ def update_task_id(page_id, task_id):
     if not success:
         _LOG.error(f"Error adding TodoistTaskId={task_id} to notion task '{page['url']}'")
 
+
+def sort_tasks_by_hierarchy(tasks: list[TodoistTask]) -> list[TodoistTask]:
+    """
+    Sort tasks to ensure that any parent task always comes before its children
+    """
+    if not tasks:
+        return []
+
+    children = defaultdict(list)  # parent_id -> [child_tasks]
+    in_degree = {}  # task_id -> number of parents (0 or 1)
+    task_map = {}  # task_id -> task object
+
+    for task in tasks:
+        task_map[task.task.id] = task
+        in_degree[task.task.id] = 0
+
+    # Build the graph
+    for task in tasks:
+        if task.task.parent_id is not None:
+            if task.task.parent_id in task_map:
+                children[task.task.parent_id].append(task)
+                in_degree[task.task.id] = 1
+            # If parent doesn't exist, in_degree stays 0 (orphaned task)
+
+    # Kahn's algorithm for topological sorting
+    queue = deque()
+    result = []
+
+    # Start with all nodes that have in-degree 0 (root tasks and orphaned tasks)
+    for task in tasks:
+        if in_degree[task.task.id] == 0:
+            queue.append(task)
+
+    # Process tasks level by level
+    while queue:
+        current_task = queue.popleft()
+        result.append(current_task)
+
+        # Process all children of current task
+        for child_task in children[current_task.task.id]:
+            in_degree[child_task.task.id] -= 1
+            if in_degree[child_task.task.id] == 0:
+                queue.append(child_task)
+
+    return result

@@ -257,7 +257,6 @@ class TodoistToNotionMapper:
             notion_props.update(props)
             child_blocks.extend(blocks)
         # Add parent page relation
-        # TODO Extract to separate step after task sync to ensure all parent already created in Notion
         parent_page_id = self.extract_parent_notion_uuid(task)
         if parent_page_id:
             notion_props.update({parent_property: PFormat.single_relation(parent_page_id)})
