@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 
 import notion
-import secrets
+import config
 import todoist_utils
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
@@ -18,14 +18,14 @@ SYNCED_TIME_PROPERTY_NAME = 'Synced'
 PARENT_PROPERTY_NAME = 'Parent item'
 
 _LOG = logging.getLogger(__name__)
-LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
+LOCAL_TIMEZONE = pytz.timezone(config.T_ZONE)
 
 
 class TodoistSyncManager:
     def __init__(self):
         self.todoist_mapper = todoist_utils.TodoistToNotionMapper()
         self.todoist_fetcher = todoist_utils.TodoistFetcher()
-        self.tasks_db_id = secrets.MASTER_TASKS_DB_ID
+        self.tasks_db_id = config.MASTER_TASKS_DB_ID
 
     def sync_all(self):
         self.sync_created_tasks(all_tasks=False, sync_completed=False)

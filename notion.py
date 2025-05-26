@@ -1,21 +1,21 @@
-from datetime import datetime
 import json
 import logging
+from datetime import datetime
 from functools import reduce
 
 import pytz
 import requests
 
-import secrets
-from notion_filters import Filter
+import config
 from models import TodoistTask
+from notion_filters import Filter
 from notion_filters.base import FilterBase
 
 _LOG = logging.getLogger(__name__)
-LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
+LOCAL_TIMEZONE = pytz.timezone(config.T_ZONE)
 
 headers = {
-    "Authorization": "Bearer " + secrets.NOTION_TOKEN,
+    "Authorization": "Bearer " + config.NOTION_TOKEN,
     "Notion-Version": "2022-06-28",
     "Content-Type": "application/json"
 }
@@ -69,6 +69,7 @@ def get_synced_notion_tasks(database_id: str, todoist_id_prop: str) -> list[dict
     """Fetch tasks already linked in Notion"""
     query = Filter.RichText(todoist_id_prop).is_not_empty()
     return read_database(database_id, query)
+
 
 def get_notion_tasks_before_time(db_id: str, todoist_id_text_prop: str, last_synced_date_prop: str,
                                  updated_tasks: list[TodoistTask], updated_events: dict[str, str]) -> list[dict]:

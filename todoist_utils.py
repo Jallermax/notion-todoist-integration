@@ -16,12 +16,12 @@ from todoist_api_python.models import Task
 from models import TodoistTask
 
 import notion
-import secrets
+import config
 from notion import PropertyFormatter as PFormat
 from notion import PropertyParser as PParser
 
 _LOG = logging.getLogger(__name__)
-LOCAL_TIMEZONE = pytz.timezone(secrets.T_ZONE)
+LOCAL_TIMEZONE = pytz.timezone(config.T_ZONE)
 MD_LINK_PATTERN = re.compile(r"\[([^]]*)]\((https?://[^\s)]+)\)|(https?://[^\s)]+)")
 NOTION_LINK_PATTERN = re.compile(
     "(https://www.notion.so)?/"  # Optional Notion host
@@ -79,7 +79,7 @@ class TodoistToNotionMapper:
 
     def __init__(self):
         self.mappings = load_todoist_to_notion_mapper()
-        self.todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
+        self.todoist_api = TodoistAPI(token=config.TODOIST_TOKEN)
 
     def get_mapping(self, prop_key: str) -> dict:
         return self.mappings[prop_key]
@@ -91,7 +91,7 @@ class TodoistToNotionMapper:
         :return: dict(todoist_label_id: notion_tag_page_id)
         """
         labels = {label.name: label.id for page in self.todoist_api.get_labels() for label in page}
-        notion_master_tags = n_tags if n_tags else notion.read_database(secrets.MASTER_TAG_DB)
+        notion_master_tags = n_tags if n_tags else notion.read_database(config.MASTER_TAG_DB)
         notion_tags = {tag: page['id'] for page in notion_master_tags if
                        (tag := PParser.rich_text(page, todoist_tags_text_prop))}
         tag_mapping = {labels[key]: notion_tags[key] for key in notion_tags if key in labels}
@@ -308,8 +308,8 @@ class TodoistToNotionMapper:
 
 class TodoistFetcher:
     def __init__(self):
-        self.todoist_api = TodoistAPI(token=secrets.TODOIST_TOKEN)
-        self.sync_api = SyncTodoistAPI(api_key=secrets.TODOIST_TOKEN)
+        self.todoist_api = TodoistAPI(token=config.TODOIST_TOKEN)
+        self.sync_api = SyncTodoistAPI(api_key=config.TODOIST_TOKEN)
         self.sync_api.sync(True)
 
     def get_completed_tasks(self, since: datetime = None, exclude_ids: list[str] = None) -> list[Task]:

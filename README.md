@@ -1,6 +1,17 @@
-Every 60 seconds runs workflow of creating history records to Notion for each completed Todoist task linked with Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one.</br>
+Every 60 seconds runs workflow of creating history records to Notion for each completed Todoist task linked with
+Notion (Maintenance action DB) and creating new linked Todoist tasks for each maintenance action without one.</br>
 
-secrets.py needs to be crated and filled using template_secrets.py
+## Environment Setup
+
+1. Copy the `.env.example` file to `.env` and fill in the required environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+2. Customize mappings.json with your specific mappings between Todoist projects and Notion databases.
+3. Install the required Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ---
 *Links:*</br>

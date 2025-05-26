@@ -3,3 +3,4 @@ requests~=2.32.3
 todoist-api-python~=3.1.0,<4
 synctodoist==0.3.4
 tqdm~=4.67.1
+python-dotenv
