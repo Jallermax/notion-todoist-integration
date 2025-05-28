@@ -8,7 +8,7 @@ import requests
 
 import config
 from models import TodoistTask
-from notion_filters import Filter
+from notion_filters import Filter, AndFilter, OrFilter
 from notion_filters.base import FilterBase
 
 _LOG = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ def read_databases_list(**kwargs):
 
 def read_database(database_id, raw_query=None, log_to_file=False, all_batch=True) -> list[dict]:
     data = []
-    query = raw_query.__dict__() if isinstance(raw_query, FilterBase) else raw_query
+    query = raw_query.__dict__() if isinstance(raw_query, FilterBase | AndFilter | OrFilter) else raw_query
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
     has_more = True
     while has_more:

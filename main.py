@@ -1,4 +1,5 @@
 import logging
+import time
 
 from todoist_sync_manager import TodoistSyncManager
 
@@ -10,9 +11,9 @@ if __name__ == '__main__':
     print('Started scenarios...')
     # gather_metadata(todoist_api)
     scenarios.sync_created_tasks(all_tasks=True, sync_completed=False, overwrite_existing_backlinks=True)  # One time migration of all tasks to Notion
-    # while True:
-    #     scenarios.sync_deleted_tasks()
-    #     scenarios.sync_updated_tasks()
-    #     scenarios.sync_created_tasks(sync_completed=True)
+    while True:
+        scenarios.sync_deleted_tasks()
+        scenarios.sync_updated_tasks()
+        scenarios.sync_created_tasks(sync_completed=True)
     #     # sync_periodic_actions()
-    #     time.sleep(60)
+        time.sleep(60)

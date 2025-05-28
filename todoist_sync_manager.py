@@ -123,8 +123,8 @@ class TodoistSyncManager:
         metadata = notion.read_database_metadata(self.tasks_db_id)['properties']
         for entry in entries_to_update:
             todoist_task = next(
-                filter(lambda x: str(x['id']) == PParser.rich_text(entry, TODOIST_ID_PROP), updated_tasks))
-            props_to_check_for_upd = ['content', 'due.date', 'checked', 'priority', 'notes']
+                filter(lambda x: str(x.task.id) == PParser.rich_text(entry, TODOIST_ID_PROP), updated_tasks))
+            props_to_check_for_upd = ['content', 'due.date', 'is_completed', 'priority', 'comments']
             props_to_upd = self.todoist_mapper.update_properties(entry, todoist_task, props_to_check_for_upd, metadata)
 
             if props_to_upd:
@@ -140,7 +140,7 @@ class TodoistSyncManager:
         events = self.todoist_fetcher.get_events(object_type='item', event_type='deleted')
         if not events:
             return
-        deleted_tasks_id = [str(x['object_id']) for x in events]
+        deleted_tasks_id = [str(x['v2_object_id']) for x in events]
         notion_tasks_to_delete = self._get_notion_tasks_to_delete(TODOIST_ID_PROP, deleted_tasks_id)
 
         synced_time = datetime.now(LOCAL_TIMEZONE).isoformat()

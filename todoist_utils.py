@@ -1,7 +1,7 @@
 import ast
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from enum import Enum
 from functools import reduce, lru_cache
 from typing import Literal, Any
@@ -238,7 +238,8 @@ class TodoistToNotionMapper:
                 todoist_val = eval(default_notion_values.get('expression'), {'value': todoist_val})
 
             if formatter['method'] in [PFormat.single_title, PFormat.single_rich_text]:
-                current_prop_values.append(PFormat.text(todoist_val))
+                current_prop_values.extend(
+                    [PFormat.text(todoist_val[i:i + 2000]) for i in range(0, len(todoist_val), 2000)])
             else:
                 current_prop_values.append(formatter['method'](todoist_val, property_obj=is_property))
 
@@ -263,12 +264,15 @@ class TodoistToNotionMapper:
             notion_props.update({parent_property: PFormat.single_relation(parent_page_id)})
         return notion_props, child_blocks
 
-    def update_properties(self, notion_task, todoist_task, prop_keys_to_update, db_metadata):
+    def update_properties(self, notion_task: dict, todoist_task: TodoistTask, prop_keys_to_update: list[str], db_metadata: dict):
         props_to_upd = {}
         for prop_key in prop_keys_to_update:
             mappings = self.get_mapping(prop_key)
             # TODO handle list properties
-            todoist_val = deep_get_task_prop(todoist_task.data, prop_key)
+            task_dict = todoist_task.task.to_dict()
+            task_dict['is_completed'] = todoist_task.task.is_completed
+            task_dict['comments'] = [com.content for com in todoist_task.comments]
+            todoist_val = deep_get_task_prop(task_dict, prop_key)
             default_notion_values = mappings.get('default_values', {})
             mapped_prop = mappings.get('values', {}).get(str(todoist_val), {})
             mapped_name = mapped_prop.get('name', default_notion_values.get('name'))
@@ -293,7 +297,7 @@ class TodoistToNotionMapper:
             old_val = parser(notion_task, mapped_name)
 
             if new_val != old_val:
-                _LOG.debug(f"for {todoist_task['content']=}, {prop_key=} \n\t\t{old_val=}, \n\t\t{new_val=}")
+                _LOG.debug(f"for {todoist_task.task.content=}, {prop_key=} \n\t\t{old_val=}, \n\t\t{new_val=}")
                 # append to dict to_upd
                 if mapped_type == 'title':
                     props_to_upd[mapped_name] = PFormat.title(formatted_values)
@@ -312,24 +316,10 @@ class TodoistFetcher:
         self.sync_api = SyncTodoistAPI(api_key=config.TODOIST_TOKEN)
         self.sync_api.sync(True)
 
-    def get_completed_tasks(self, since: datetime = None, exclude_ids: list[str] = None) -> list[Task]:
-        completed_tasks = self._get_completed_tasks(since=since.isoformat() if since else None)
-        return [Task.from_dict(task) for task in completed_tasks if not exclude_ids or task['id'] not in exclude_ids]
-
-    def _get_completed_tasks(self, since: str = None, limit: int = 500, batch_size: int = 100) -> list[dict]:
-        """@since: datetime string in '2024-1-15T10:13:00' format"""
-        self.sync_api.sync()
-        params = {'limit': batch_size, 'offset': 0}
-        if since:
-            params['since'] = since
-        all_items = []
-        while len(all_items) < limit:
-            items = self._send_sync_get('completed/get_all', **params)['items']
-            all_items.extend(items)
-            params['offset'] += batch_size
-            if len(items) == 0:
-                break
-        return all_items
+    def get_completed_tasks(self, since: datetime = None) -> list[Task]:
+        ss = since if since else datetime.now(UTC) - timedelta(days=90)
+        result = self.todoist_api.get_completed_tasks_by_completion_date(since=ss, until=datetime.now(UTC))
+        return [task for page in result for task in page]
 
     def get_events(self, limit=10000, batch_size=100,
                    event_type: EventType = None,
@@ -371,7 +361,7 @@ class TodoistFetcher:
         active_tasks = [task for page in self.todoist_api.get_tasks() for task in page]
 
         if get_completed:
-            completed = self.get_completed_tasks(exclude_ids=[task.id for task in active_tasks])
+            completed = self.get_completed_tasks()
             active_tasks.extend(completed)
 
         return active_tasks
@@ -379,16 +369,16 @@ class TodoistFetcher:
     def get_recently_added_tasks(self, since_date: datetime = None, days_old: int = None, get_completed: bool = True
                                  ) -> list[Task]:
         events: list[dict] = self.get_events(object_type='item', event_type='added')
-        since_date = datetime.now(LOCAL_TIMEZONE) - timedelta(days=days_old) if not since_date and days_old else None
-        created_tasks: list[str] = list(x['object_id'] for x in events if not since_date
-                                        or datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ")
+        since_date = datetime.now(UTC) - timedelta(days=days_old) if not since_date and days_old else None
+        created_tasks: list[str] = list(x['v2_object_id'] for x in events if not since_date
+                                        or datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%S.%fZ")
                                         > since_date)
         _LOG.debug(f"Received {len(created_tasks)} recently created tasks" + (
             f" for the last {days_old} days" if days_old else ""))
 
-        all_tasks = [task for page in self.todoist_api.get_tasks(ids=created_tasks) for task in page]
+        all_tasks = self.get_tasks(ids=created_tasks)
         if get_completed:
-            completed_tasks = self.get_completed_tasks(since=since_date, exclude_ids=[task.id for task in all_tasks])
+            completed_tasks = self.get_completed_tasks(since=since_date)
             all_tasks.extend(completed_tasks)
 
         return all_tasks
@@ -401,26 +391,34 @@ class TodoistFetcher:
         events = self.get_events(object_type='item', event_type='updated')
         if sync_completed:
             events.extend(self.get_events(object_type='item', event_type='completed'))
-            # sort to have latest event_date after reducing to unique dict entry
+            # sort to have the latest event_date after reducing to unique dict entry
             events.sort(key=lambda k: k['event_date'])
-        updated_tasks_to_date = {x['object_id']: LOCAL_TIMEZONE.normalize(
+        updated_tasks_to_date = {x['v2_object_id']: LOCAL_TIMEZONE.normalize(
             pytz.timezone("UTC").localize(
-                datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%SZ"))).isoformat() for x in events}
+                datetime.strptime(x['event_date'], "%Y-%m-%dT%H:%M:%S.%fZ"))).isoformat() for x in events}
 
         tasks_to_exclude = []
         if not sync_created:
             events = self.get_events(object_type='item', event_type='added')
-            tasks_to_exclude.extend([x['object_id'] for x in events])
+            tasks_to_exclude.extend([x['v2_object_id'] for x in events])
         tasks_to_exclude = list(set(tasks_to_exclude))
         for task_id in tasks_to_exclude:
             if not tasks_to_exclude or task_id in updated_tasks_to_date.keys():
                 updated_tasks_to_date.pop(task_id)
 
-        updated_tasks = [task for page in self.todoist_api.get_tasks(ids=list(updated_tasks_to_date.keys())) for task in page]
+        task_ids = list(updated_tasks_to_date.keys())
+        updated_tasks = self.get_tasks(task_ids)
         # items.all(
         #     lambda x: x['id'] in updated_tasks_to_date.keys() and (sync_completed or x['checked'] == 0))
         _LOG.debug(f"Received {len(updated_tasks)} updated tasks")
         return updated_tasks, updated_tasks_to_date
+
+    def get_tasks(self, ids: list[str]) -> list[Task]:
+        updated_tasks = []
+        for i in range(0, len(ids), 100):
+            chunk_ids = ids[i:i + 100]
+            updated_tasks.extend([task for page in self.todoist_api.get_tasks(ids=chunk_ids) for task in page])
+        return updated_tasks
 
     def append_comments(self, tasks: list[TodoistTask]):
         """Append comments to tasks."""

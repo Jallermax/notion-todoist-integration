@@ -49,10 +49,13 @@ class AndFilter:
     def __str__(self) -> str:
         return str(self.to_dict())
 
+    def __dict__(self) -> dict[str, Any]:
+        return self.to_dict()
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(filters={self.filters})"
 
-    def to_dict(self, pretty=False) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the AndFilter to a dictionary format required by the Notion API.
 
@@ -77,10 +80,13 @@ class OrFilter:
     def __str__(self) -> str:
         return str(self.to_dict())
 
+    def __dict__(self) -> dict[str, Any]:
+        return self.to_dict()
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(filters={self.filters})"
 
-    def to_dict(self, pretty=False) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the OrFilter to a dictionary format required by the Notion API.
 
