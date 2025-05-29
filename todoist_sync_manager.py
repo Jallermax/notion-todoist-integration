@@ -76,9 +76,6 @@ class TodoistSyncManager:
         tasks: list[TodoistTask] = [TodoistTask(task=task) for task in all_tasks]
         tasks = sort_tasks_by_hierarchy(tasks)
 
-        _LOG.info(f"Fetching task comments from Todoist...")
-        self.todoist_fetcher.append_comments(tasks)
-
         # 2. Get already synced notion tasks not to create dupes
         _LOG.info("Fetching synced tasks from Notion...")
         notion_tasks = notion.get_synced_notion_tasks(self.tasks_db_id, TODOIST_ID_PROP)
@@ -86,8 +83,13 @@ class TodoistSyncManager:
         _LOG.info(f"Found {len(notion_tasks)} synced tasks in Notion.")
 
         # 3. Create not yet linked actions/tasks in Notion
+        tasks_to_create = [task for task in tasks if task.task.id not in linked_task_ids]
+
+        _LOG.info(f"Fetching task comments from Todoist...")
+        self.todoist_fetcher.append_comments(tasks_to_create)
+
         _LOG.info("Creating new Notion tasks for unlinked Todoist tasks...")
-        for task in [task for task in tasks if task.task.id not in linked_task_ids]:
+        for task in tasks_to_create:
             self.create_notion_task(task)
             # 4. Update Todoist task with Notion page reference
             self._update_todoist_task_with_notion_link(task, overwrite_existing=overwrite_existing_backlinks)

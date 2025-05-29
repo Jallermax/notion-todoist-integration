@@ -16,4 +16,5 @@ if __name__ == '__main__':
         scenarios.sync_updated_tasks()
         scenarios.sync_created_tasks(sync_completed=True)
     #     # sync_periodic_actions()
+        print("Waiting for 60 seconds before next sync...")
         time.sleep(60)

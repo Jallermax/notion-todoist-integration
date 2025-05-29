@@ -43,7 +43,7 @@
         "comment": "ML career path"
       },
       "💵finances": {
-        "name": "Outcomes",
+        "name": "Projects",
         "value": "bc8cbd959db24dbeacbe597ac5fb1440",
         "comment": "finances"
       },
@@ -85,7 +85,7 @@
       "_in_progress": {
         "name": "Status",
         "type": "status",
-        "value": "In progress"
+        "value": "In Progress"
       }
     }
   },
@@ -118,7 +118,7 @@
         "comment": "Shopping -> Shopping List temp"
       },
       "6CrfgrrqJpx9MqMq": {
-        "value": "a392c0f5c35f40e5a8f367aeb6d96f28",
+        "value": "ca2fe83085974361a27bbdc06a1bfd4c",
         "comment": "Periodical actions -> Periodic Maintenances"
       },
       "6FhG939F8rC9373r": {
@@ -139,7 +139,7 @@
       },
       "6FhmvJvJP9v8rr9H": {
         "value": "bc8cbd959db24dbeacbe597ac5fb1440",
-        "name": "Outcomes",
+        "name": "Projects",
         "type": "relation",
         "comment": "Financial Wellness Outcome"
       },
